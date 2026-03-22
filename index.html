@@ -153,7 +153,7 @@
   <!-- JOURNEES -->
   <div class="card">
     <h2>Journees de travail</h2>
-    <p class="info no-print">Base + supp (+100% / +200%) : calcul automatique. Majo jour (+50%) et nuit (+100%) : saisie manuelle.</p>
+    <p class="info no-print">Calcul automatique : base, supp (+100% / +200%), majo nuit +100% (20h-7h). Majo jour +50% : saisie manuelle. Les champs auto sont modifiables.</p>
     <div class="no-print" style="display:grid;grid-template-columns:110px 80px 65px 80px 70px 70px 40px;gap:7px;padding:0 8px;margin-bottom:4px;">
       <span style="font-size:.7em;color:#999;font-weight:600;">Date</span>
       <span style="font-size:.7em;color:#999;font-weight:600;">Debut</span>
@@ -335,19 +335,61 @@ function updateBadge(){
   document.getElementById('rate-badge').textContent=fmt(v)+' EUR/8h';
 }
 
+// ─── NIGHT HOURS CALC (20h00-07h00) ─────────────────────────────────
+
+function calcNightHours(startStr, endStr, pauseMin){
+  // Plage nuit CCNP : 20h00 a 07h00
+  const NUIT_START=20, NUIT_END=7;
+  const s=parseTime(startStr), eRaw=parseTime(endStr);
+  const e=(eRaw<=s)?eRaw+24:eRaw;
+  const totalH=Math.max(e-s-pauseMin/60,0);
+  if(totalH<=0)return 0;
+  // Calcul des heures dans la plage nuit (peut etre sur 2 fenetres : 20-24 et 0-7)
+  let nightH=0;
+  // Fenetre 1 : 20h - 24h (meme jour)
+  nightH+=overlap(s,e,NUIT_START,24);
+  // Fenetre 2 : 0h - 7h (lendemain, donc 24-31 en absolu)
+  nightH+=overlap(s,e,24,24+NUIT_END);
+  // Fenetre 3 : si debut avant 7h (ex: 05h-14h), heures 0-7
+  nightH+=overlap(s,e,0,NUIT_END);
+  // La pause reduit proportionnellement les heures de nuit
+  if(totalH+pauseMin/60>0 && nightH>0){
+    const ratio=totalH/(totalH+pauseMin/60);
+    nightH=nightH*ratio;
+  }
+  return Math.round(nightH*4)/4; // arrondi au quart d'heure
+}
+
+function overlap(s,e,winS,winE){
+  const a=Math.max(s,winS), b=Math.min(e,winE);
+  return Math.max(b-a,0);
+}
+
+function autoFillNight(id){
+  const sv=document.getElementById('start-'+id);
+  const ev=document.getElementById('end-'+id);
+  const pv=document.getElementById('pause-'+id);
+  const mnv=document.getElementById('majoN-'+id);
+  if(!sv||!ev||!mnv)return;
+  const nh=calcNightHours(sv.value,ev.value,parseInt(pv.value)||0);
+  mnv.value=nh;
+  recalc();
+}
+
 // ─── DAYS ────────────────────────────────────────────────────────────
 
 function addDay(start,end,pause,majoJ,majoN){
   dayCount++;const id=dayCount;
   const div=document.createElement('div');
   div.className='day-row';div.id='day-'+id;
+  const autoN=(majoN!==undefined&&majoN!==null)?majoN:calcNightHours(start||'08:00',end||'19:00',(pause!==undefined&&pause!==null)?pause:60);
   div.innerHTML=`
     <div><input type="date" id="date-${id}" onchange="recalc()"/></div>
-    <div><input type="time" id="start-${id}" value="${start||'08:00'}" onchange="recalc()"/></div>
-    <div><input type="number" id="pause-${id}" value="${pause||60}" min="0" style="width:55px" onchange="recalc()"/></div>
-    <div><input type="time" id="end-${id}" value="${end||'19:00'}" onchange="recalc()"/></div>
-    <div><input type="number" id="majoJ-${id}" value="${majoJ||0}" min="0" step="0.5" style="width:55px" onchange="recalc()"/></div>
-    <div><input type="number" id="majoN-${id}" value="${majoN||0}" min="0" step="0.5" style="width:55px" onchange="recalc()"/></div>
+    <div><input type="time" id="start-${id}" value="${start||'08:00'}" onchange="autoFillNight(${id})"/></div>
+    <div><input type="number" id="pause-${id}" value="${pause!==undefined&&pause!==null?pause:60}" min="0" style="width:55px" onchange="autoFillNight(${id})"/></div>
+    <div><input type="time" id="end-${id}" value="${end||'19:00'}" onchange="autoFillNight(${id})"/></div>
+    <div><input type="number" id="majoJ-${id}" value="${majoJ||0}" min="0" step="0.25" style="width:55px" onchange="recalc()"/></div>
+    <div><input type="number" id="majoN-${id}" value="${autoN}" min="0" step="0.25" style="width:55px" onchange="recalc()" style="background:#fff3e0"/></div>
     <div><button class="btn-del" onclick="removeDay(${id})">X</button></div>`;
   document.getElementById('days-container').appendChild(div);
   recalc();
