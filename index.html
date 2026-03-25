@@ -1,1 +1,1461 @@
-undefined
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Director - Club Med</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs" type="module"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* TITLEBAR (draggable for Electron) */
+    .titlebar {
+      -webkit-app-region: drag;
+      height: 38px;
+      background: #0d0d1a;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 8px;
+    }
+    .titlebar .dot { width: 12px; height: 12px; border-radius: 50%; -webkit-app-region: no-drag; cursor: pointer; }
+    .titlebar .dot.red { background: #ff5f57; }
+    .titlebar .dot.yellow { background: #febc2e; }
+    .titlebar .dot.green { background: #28c840; }
+    .titlebar .title { flex: 1; text-align: center; font-size: 12px; color: #6b7280; font-weight: 500; }
+
+    /* DROP VIEW */
+    .drop-view {
+      height: calc(100vh - 38px);
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .drop-view h1 {
+      font-size: 48px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fdcb6e, #e17055, #6c5ce7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .drop-view .subtitle { font-size: 16px; color: #a0aec0; margin-bottom: 40px; }
+
+    .drop-zone {
+      width: 100%; max-width: 640px;
+      border: 2px dashed #4a5568;
+      border-radius: 20px;
+      padding: 48px;
+      text-align: center;
+      background: rgba(255,255,255,0.03);
+      backdrop-filter: blur(10px);
+      transition: all 0.3s;
+    }
+    .drop-zone.dragover { border-color: #6c5ce7; background: rgba(108,92,231,0.08); }
+    .drop-zone .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.6; }
+    .drop-zone h2 { font-size: 18px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
+    .drop-zone p { font-size: 13px; color: #718096; margin-bottom: 24px; }
+    .drop-zone .separator { color: #4a5568; margin: 20px 0; font-size: 13px; }
+
+    /* PDF Loading overlay */
+    .loading-overlay {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(13,13,26,0.92); backdrop-filter: blur(12px);
+      flex-direction: column; align-items: center; justify-content: center;
+    }
+    .loading-overlay.active { display: flex; }
+    .loading-spinner {
+      width: 56px; height: 56px; border: 4px solid rgba(108,92,231,0.2);
+      border-top-color: #6c5ce7; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin-bottom: 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-overlay .msg { font-size: 16px; color: #e2e8f0; font-weight: 600; }
+    .loading-overlay .sub { font-size: 13px; color: #718096; margin-top: 6px; }
+    .loading-overlay .progress-bar {
+      width: 280px; height: 6px; background: rgba(255,255,255,0.1);
+      border-radius: 3px; margin-top: 16px; overflow: hidden;
+    }
+    .loading-overlay .progress-fill {
+      height: 100%; background: linear-gradient(90deg, #6c5ce7, #a29bfe);
+      border-radius: 3px; width: 0%; transition: width 0.3s;
+    }
+
+    /* File type badges */
+    .file-types {
+      display: flex; gap: 10px; margin-top: 16px; justify-content: center;
+    }
+    .file-type-badge {
+      padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .file-type-badge.pdf { background: rgba(225,112,85,0.15); color: #e17055; border: 1px solid rgba(225,112,85,0.3); }
+    .file-type-badge.md { background: rgba(108,92,231,0.15); color: #a29bfe; border: 1px solid rgba(108,92,231,0.3); }
+    .file-type-badge.txt { background: rgba(0,184,148,0.15); color: #00b894; border: 1px solid rgba(0,184,148,0.3); }
+
+    .drop-zone textarea {
+      width: 100%; min-height: 120px;
+      background: rgba(0,0,0,0.3); border: 1px solid #2d3748;
+      border-radius: 12px; padding: 16px; color: #e2e8f0;
+      font-size: 13px; font-family: "SF Mono", Monaco, monospace;
+      resize: vertical; outline: none;
+    }
+    .drop-zone textarea:focus { border-color: #6c5ce7; }
+
+    .btn-row { display: flex; gap: 12px; margin-top: 20px; justify-content: center; }
+    .btn {
+      padding: 12px 28px; border-radius: 12px; border: none;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-primary { background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: #fff; }
+    .btn-primary:disabled { background: #2d3748; opacity: 0.5; cursor: default; }
+    .btn-secondary { background: transparent; border: 1px solid #4a5568; color: #a0aec0; }
+    .btn-secondary:hover { border-color: #6c5ce7; color: #a29bfe; }
+
+    .providers-bar { margin-top: 48px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .provider-chip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 20px;
+      background: rgba(255,255,255,0.05);
+    }
+    .provider-chip .logo {
+      width: 20px; height: 20px; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 8px; font-weight: 700;
+    }
+    .provider-chip span { font-size: 11px; color: #a0aec0; }
+
+    /* ANALYSIS VIEW */
+    .analysis-view { display: none; height: calc(100vh - 38px); flex-direction: column; }
+    .analysis-view.active { display: flex; }
+    .drop-view.hidden { display: none; }
+
+    /* TOPBAR */
+    .topbar {
+      background: #1a1a2e; padding: 10px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 16px; }
+    .topbar .brand {
+      font-size: 18px; font-weight: 800;
+      background: linear-gradient(135deg, #fdcb6e, #e17055);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .topbar .info { font-size: 13px; color: #718096; }
+    .topbar .back-btn {
+      background: rgba(255,255,255,0.1); border: none; color: #fff;
+      padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    }
+    .tab-buttons { display: flex; gap: 6px; }
+    .tab-btn {
+      padding: 6px 14px; border-radius: 8px; font-size: 12px;
+      font-weight: 600; cursor: pointer; transition: all 0.2s;
+      border: 1px solid #2d3748; background: transparent; color: #718096;
+    }
+    .tab-btn.active { border-color: #6c5ce7; background: rgba(108,92,231,0.12); color: #a29bfe; }
+
+    /* TIMELINE */
+    .timeline-bar {
+      background: #fff; border-bottom: 1px solid #e9ecef;
+      padding: 12px 16px; flex-shrink: 0;
+    }
+    .timeline-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .timeline-header span:first-child { font-size: 12px; font-weight: 700; color: #1a1a2e; }
+    .timeline-header span:last-child { font-size: 11px; color: #868e96; }
+    .timeline-track { display: flex; gap: 2px; height: 42px; border-radius: 8px; overflow: hidden; }
+    .timeline-block {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s; min-width: 24px;
+    }
+    .timeline-block.selected { outline: 2px solid #fff; outline-offset: -2px; }
+    .timeline-block .num { font-size: 9px; color: #fff; font-weight: 700; }
+    .timeline-block .dur { font-size: 8px; color: rgba(255,255,255,0.7); }
+    .timeline-times { display: flex; justify-content: space-between; margin-top: 4px; }
+    .timeline-times span { font-size: 10px; color: #adb5bd; }
+
+    /* MAIN LAYOUT */
+    .main-content { display: flex; flex: 1; overflow: hidden; }
+
+    /* LEFT PANEL */
+    .left-panel {
+      width: 360px; overflow-y: auto; padding: 16px;
+      background: #fff; border-right: 1px solid #e9ecef; flex-shrink: 0;
+    }
+    .left-panel .section-title {
+      font-size: 11px; font-weight: 700; color: #868e96;
+      letter-spacing: 0.5px; margin-bottom: 12px;
+    }
+    .shots-list { display: flex; flex-direction: column; gap: 10px; }
+
+    /* SHOT CARD */
+    .shot-card {
+      padding: 14px; border-radius: 14px; cursor: pointer;
+      background: #fafbfc; border: 1px solid #e9ecef; transition: all 0.2s;
+    }
+    .shot-card:hover { border-color: #ced4da; }
+    .shot-card.selected { background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .shot-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .shot-card .shot-meta { font-size: 11px; color: #868e96; font-weight: 600; letter-spacing: 0.3px; }
+    .shot-card .shot-title { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-top: 2px; }
+    .shot-card .provider-badge {
+      padding: 4px 10px; border-radius: 8px; font-size: 11px;
+      font-weight: 700; color: #fff;
+    }
+    .shot-card .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .shot-card .tag {
+      font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    }
+    .shot-card .prompt-preview {
+      font-size: 11px; color: #495057; line-height: 1.5;
+      background: #f8f9fa; padding: 8px; border-radius: 8px;
+      max-height: 50px; overflow: hidden; font-family: "SF Mono", Monaco, monospace;
+    }
+    .shot-card.selected .prompt-preview { max-height: none; }
+    .shot-card .dialogue { font-size: 12px; color: #6c5ce7; font-style: italic; margin-top: 6px; }
+
+    /* RIGHT PANEL */
+    .right-panel { flex: 1; overflow-y: auto; padding: 20px; background: #f0f2f5; }
+    .right-panel .shot-number { font-size: 11px; color: #868e96; font-weight: 600; letter-spacing: 0.5px; }
+    .right-panel h2 { font-size: 22px; font-weight: 800; color: #1a1a2e; margin: 4px 0 16px; }
+
+    .prompt-box {
+      background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 16px;
+    }
+    .prompt-box .label { font-size: 11px; color: #6c5ce7; font-weight: 700; margin-bottom: 8px; }
+    .prompt-box .text {
+      font-size: 14px; color: #e2e8f0; line-height: 1.7;
+      font-family: "SF Mono", Monaco, monospace;
+    }
+    .prompt-box .copy-btn {
+      margin-top: 12px; padding: 6px 14px; border-radius: 8px;
+      border: 1px solid #4a5568; background: transparent;
+      color: #a0aec0; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .prompt-box .copy-btn:hover { border-color: #6c5ce7; color: #a29bfe; }
+
+    .dialogue-box {
+      background: #f8f0ff; border-radius: 12px; padding: 16px;
+      border: 1px solid #e8d5f5; margin-bottom: 16px;
+    }
+    .dialogue-box .label { font-size: 11px; font-weight: 700; }
+    .dialogue-box .text { font-size: 14px; color: #1a1a2e; font-style: italic; }
+
+    .section-label { font-size: 12px; font-weight: 700; color: #868e96; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+    /* SCORE BARS */
+    .score-card { background: #fff; border-radius: 12px; padding: 16px; border: 1px solid #e9ecef; margin-bottom: 16px; }
+    .score-row { margin-bottom: 8px; }
+    .score-row .score-header { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; }
+    .score-row .score-label { color: #495057; }
+    .score-row .score-value { font-weight: 600; }
+    .score-row .score-track { height: 6px; background: #f1f3f5; border-radius: 3px; overflow: hidden; }
+    .score-row .score-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+    /* PROVIDER RECOMMENDATION */
+    .reco-card {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 10px; margin-bottom: 6px;
+      background: #f8f9fa; border: 1px solid #e9ecef;
+    }
+    .reco-card.top { border-width: 2px; }
+    .reco-card .reco-logo {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 13px; flex-shrink: 0;
+    }
+    .reco-card .reco-info { flex: 1; min-width: 0; }
+    .reco-card .reco-name { font-weight: 600; font-size: 13px; color: #1a1a2e; }
+    .reco-card .reco-score { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 12px; }
+    .reco-card .reco-pricing { font-size: 11px; color: #868e96; margin-top: 2px; }
+    .reco-card .reco-reasons { font-size: 11px; font-style: italic; margin-top: 3px; }
+
+    /* API KEYS */
+    .api-key-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 10px; margin-bottom: 6px;
+      background: #fafbfc; border: 1px solid #e9ecef;
+    }
+    .api-key-row .key-logo {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 10px; font-weight: 700;
+    }
+    .api-key-row .key-info { flex: 1; }
+    .api-key-row .key-name { font-size: 12px; font-weight: 600; color: #1a1a2e; }
+    .api-key-row .key-status { font-size: 11px; }
+    .api-key-row input {
+      flex: 1; font-size: 11px; padding: 4px 8px;
+      border: 1px solid #dee2e6; border-radius: 6px;
+      font-family: "SF Mono", Monaco, monospace; outline: none;
+    }
+    .api-key-row input:focus { border-color: #6c5ce7; }
+    .api-key-row .key-btn {
+      font-size: 11px; padding: 4px 10px; border-radius: 6px;
+      font-weight: 600; cursor: pointer; border: none;
+    }
+
+    /* BUDGET */
+    .budget-card { background: #f8f9fa; border-radius: 12px; padding: 16px; margin-top: 12px; }
+    .budget-card h3 { font-size: 13px; font-weight: 700; color: #1a1a2e; margin-bottom: 10px; }
+    .budget-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+    .budget-row .budget-name { color: #495057; }
+    .budget-row .budget-price { font-weight: 700; }
+
+    /* GENERATE BUTTON */
+    .gen-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 10px; border: none;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      color: #fff; background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+      transition: all 0.2s; margin-top: 12px;
+    }
+    .gen-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(108,92,231,0.35); }
+    .gen-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .gen-btn.generating {
+      background: linear-gradient(135deg, #e17055, #fdcb6e);
+      animation: pulse-gen 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-gen { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+    .gen-btn-all {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 24px; border-radius: 12px; border: none;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      color: #fff; background: linear-gradient(135deg, #00b894, #55efc4);
+      transition: all 0.2s; margin-left: 12px;
+    }
+    .gen-btn-all:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,184,148,0.35); }
+    .gen-btn-all:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* VIDEO PREVIEW */
+    .video-preview {
+      margin-top: 16px; border-radius: 12px; overflow: hidden;
+      background: #000; position: relative;
+    }
+    .video-preview video {
+      width: 100%; display: block; border-radius: 12px;
+    }
+    .video-preview .download-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 8px; margin-top: 8px;
+      font-size: 12px; font-weight: 600; color: #6c5ce7;
+      background: #f0ecff; text-decoration: none;
+    }
+    .video-preview .download-link:hover { background: #e0d6ff; }
+
+    /* GENERATION STATUS */
+    .gen-status {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+      font-size: 12px; font-weight: 600;
+    }
+    .gen-status.pending { background: #fff3e0; color: #e65100; }
+    .gen-status.running { background: #e3f2fd; color: #1565c0; }
+    .gen-status.succeeded { background: #e8f5e9; color: #2e7d32; }
+    .gen-status.failed { background: #ffebee; color: #c62828; }
+    .gen-status .gen-spinner {
+      width: 14px; height: 14px; border: 2px solid currentColor;
+      border-top-color: transparent; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #adb5bd; }
+  </style>
+</head>
+<body>
+
+  <!-- TITLEBAR -->
+  <div class="titlebar">
+    <div class="dot red" onclick="window.close && window.close()"></div>
+    <div class="dot yellow"></div>
+    <div class="dot green"></div>
+    <div class="title">AI Director - Script Analyzer & Preview</div>
+  </div>
+
+  <!-- DROP VIEW -->
+  <div class="drop-view" id="dropView">
+    <h1>AI Director</h1>
+    <p class="subtitle">Analysez votre script. Choisissez le bon outil IA. Previsualisez.</p>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="loading-spinner"></div>
+      <div class="msg" id="loadingMsg">Extraction du PDF en cours...</div>
+      <div class="sub" id="loadingSub">Analyse des pages</div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">📄</div>
+      <h2>Deposez votre script ou brief ici</h2>
+      <p>Script Higgsfield (.md, .txt) ou brief de production (.pdf)</p>
+      <div class="file-types">
+        <span class="file-type-badge pdf">.PDF</span>
+        <span class="file-type-badge md">.MD</span>
+        <span class="file-type-badge txt">.TXT</span>
+      </div>
+      <div class="separator">ou</div>
+      <textarea id="scriptInput" placeholder="Collez votre script ici..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeScript()" disabled>Analyser le script</button>
+        <button class="btn btn-secondary" onclick="loadDemo()">Demo Friskies 30"</button>
+      </div>
+    </div>
+
+    <div class="providers-bar" id="providersBar"></div>
+  </div>
+
+  <!-- ANALYSIS VIEW -->
+  <div class="analysis-view" id="analysisView">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="back-btn" onclick="goBack()">← Retour</button>
+        <span class="brand">AI Director</span>
+        <span class="info" id="shotCount"></span>
+      </div>
+      <div class="tab-buttons">
+        <button class="tab-btn active" data-tab="reco" onclick="switchTab('reco')">Recommandations</button>
+        <button class="tab-btn" data-tab="keys" onclick="switchTab('keys')">Cles API</button>
+        <button class="tab-btn" data-tab="budget" onclick="switchTab('budget')">Budget</button>
+        <button class="gen-btn-all" onclick="generateAllShots()" id="genAllBtn">Generer tout</button>
+        <button class="gen-btn-all" onclick="assembleVideos()" style="background:linear-gradient(135deg,#00b894,#00cec9);margin-left:8px" id="assembleBtn">Assembler videos</button>
+      </div>
+    </div>
+
+    <div class="timeline-bar">
+      <div class="timeline-header">
+        <span>Timeline</span>
+        <span id="totalDuration"></span>
+      </div>
+      <div class="timeline-track" id="timeline"></div>
+      <div class="timeline-times">
+        <span>0:00</span>
+        <span id="endTime"></span>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="left-panel">
+        <div class="section-title">SHOTS</div>
+        <div class="shots-list" id="shotsList"></div>
+      </div>
+      <div class="right-panel" id="rightPanel"></div>
+    </div>
+  </div>
+
+<script>
+// ============================================================
+// AI PROVIDERS DATABASE
+// ============================================================
+const AI_PROVIDERS = [
+  { id:"runway", name:"Runway Gen-4.5", logo:"RW", color:"#6C5CE7", pricing:"$0.05/sec | $12-76/mo", apiEndpoint:"https://api.dev.runwayml.com/v1", strengths:["Motion control","Scene consistency","Director Mode","Camera paths"], bestFor:["Camera movements","Transitions","Product shots"], animalScore:7, lightingScore:9, consistencyScore:9, speedScore:7, maxDuration:10, resolution:"1080p", docUrl:"https://docs.dev.runwayml.com/" },
+  { id:"kling", name:"Kling 3.0", logo:"KL", color:"#00B894", pricing:"$0.029/sec | Pay-per-use", apiEndpoint:"https://api.klingai.com/v1", strengths:["Textures animales","Lumiere naturelle","Long-form 2min","Audio sync"], bestFor:["Animaux realistes","Scenes longues","Lumiere doree"], animalScore:9, lightingScore:9, consistencyScore:8, speedScore:8, maxDuration:120, resolution:"1080p", docUrl:"https://docs.qingque.cn/" },
+  { id:"veo", name:"Google Veo 3.1", logo:"VE", color:"#4285F4", pricing:"$0.15/sec (fast) | API", apiEndpoint:"https://generativelanguage.googleapis.com/v1", strengths:["4K resolution","Multi-shot coherence","Audio sync natif","Dialogue"], bestFor:["Coherence multi-shot","Qualite cinema","Dialogue sync"], animalScore:8, lightingScore:9, consistencyScore:10, speedScore:6, maxDuration:30, resolution:"4K", docUrl:"https://ai.google.dev/" },
+  { id:"sora", name:"OpenAI Sora 2", logo:"SO", color:"#10A37F", pricing:"$200/mo (Pro) | API TBC", apiEndpoint:"https://api.openai.com/v1/video", strengths:["Photorealisme","Long-form 35s","Scene understanding"], bestFor:["Realisme photo","Scenes complexes","Narration"], animalScore:8, lightingScore:8, consistencyScore:8, speedScore:5, maxDuration:35, resolution:"1080p", docUrl:"https://platform.openai.com/docs" },
+  { id:"luma", name:"Luma Ray3", logo:"LM", color:"#FF6B6B", pricing:"$0.032/sec | $7.99/mo", apiEndpoint:"https://api.lumalabs.ai/v1", strengths:["4K HDR","Physique realiste","Objets 3D","Camera moves"], bestFor:["Product shots","Camera moves","Objets physiques"], animalScore:7, lightingScore:8, consistencyScore:7, speedScore:8, maxDuration:15, resolution:"4K HDR", docUrl:"https://docs.lumalabs.ai/" },
+  { id:"minimax", name:"Hailuo / MiniMax", logo:"MX", color:"#FDCB6E", pricing:"$0.02-0.05/video | $14.99/mo", apiEndpoint:"https://api.minimax.chat/v1", strengths:["Tres economique","Rapide","Bon rapport qualite/prix"], bestFor:["Volume eleve","Tests rapides","Social media"], animalScore:6, lightingScore:7, consistencyScore:6, speedScore:10, maxDuration:10, resolution:"1080p", docUrl:"https://www.minimaxi.com/" },
+  { id:"pika", name:"Pika 2.2", logo:"PK", color:"#E17055", pricing:"$0.04/sec | $8/mo", apiEndpoint:"https://api.pika.art/v1", strengths:["Rapide","Facile d'acces","Bon pour iterations"], bestFor:["Prototypage rapide","Social media","Iterations"], animalScore:6, lightingScore:7, consistencyScore:6, speedScore:9, maxDuration:8, resolution:"1080p", docUrl:"https://docs.pika.art/" },
+  { id:"seedance", name:"Seedance 2.0", logo:"SD", color:"#A29BFE", pricing:"~$0.03/sec | API", apiEndpoint:"https://api.seedance.ai/v1", strengths:["Qualite cinema","Audio-video sync","Nouveau"], bestFor:["Qualite cinema","Sync audio","VFX"], animalScore:7, lightingScore:8, consistencyScore:7, speedScore:7, maxDuration:15, resolution:"1080p+", docUrl:"https://seedance.ai/docs" },
+];
+
+let shots = [];
+let selectedShot = 0;
+let currentTab = "reco";
+let apiKeys = {};
+let klingSecretKey = "";
+
+// ============================================================
+// ANALYSIS ENGINE
+// ============================================================
+function analyzeShot(text) {
+  const l = text.toLowerCase();
+  return {
+    hasAnimal: /cat|chat|kitten|chaton|ginger|tabby|dog|chien|retriever|golden|puppy|jack russell/i.test(l),
+    animalType: /cat|chat|kitten|ginger|tabby/i.test(l) ? (/dog|chien|retriever|golden|puppy|jack russell/i.test(l) ? "both" : "cat") : (/dog|chien|retriever|golden|puppy|jack russell/i.test(l) ? "dog" : null),
+    hasPerson: /person|man|woman|homme|femme|elderly|young|farmer|people|fils himself/i.test(l),
+    isIndoor: /indoor|kitchen|living room|apartment|sofa|interieur|cuisine|salon/i.test(l),
+    isOutdoor: /outdoor|garden|park|field|farm|nature|jardin|parc/i.test(l),
+    hasSunlight: /sun|sunlight|golden hour|lens flare|backlight|morning light|soleil|lumiere/i.test(l),
+    hasMotion: /dolly|tracking|pan|tilt|zoom|handheld|stabilized/i.test(l),
+    cameraMove: /dolly/i.test(l)?"dolly":/pan/i.test(l)?"pan":/tracking/i.test(l)?"tracking":/handheld/i.test(l)?"handheld":null,
+    isSelfie: /selfie|phone|direct to camera|films himself/i.test(l),
+    isCollage: /collage|mosaic|split screen|grid|montage/i.test(l),
+    isStatic: /static|logo|end card|background/i.test(l),
+    complexity: (/collage|mosaic/i.test(l)) ? "high" : (/static|logo/i.test(l)) ? "low" : "medium"
+  };
+}
+
+function recommendProviders(a) {
+  return AI_PROVIDERS.map(p => {
+    let score = 50, reasons = [];
+    if(a.hasAnimal) { score += p.animalScore*3; if(p.animalScore>=9) reasons.push("Excellent rendu animal"); }
+    if(a.hasSunlight) { score += p.lightingScore*2; if(p.lightingScore>=9) reasons.push("Lumiere naturelle superbe"); }
+    if(a.hasMotion && p.id==="runway") { score+=15; reasons.push("Director Mode pour camera"); }
+    if(a.isStatic) { score += p.speedScore*2; reasons.push("Rapide pour shot statique"); }
+    if(a.isCollage && (p.id==="veo"||p.id==="runway")) { score+=10; reasons.push("Bon pour compositions complexes"); }
+    if(a.complexity==="high" && p.consistencyScore>=8) score+=10;
+    return { provider:p, score, reasons };
+  }).sort((a,b) => b.score - a.score);
+}
+
+function parseScript(text) {
+  const result = [];
+  const sections = text.split(/###\s*SHOT/i).filter(s => s.trim());
+  for(const section of sections) {
+    const titleMatch = section.match(/^\s*(\d+)\s*[-\u2013]\s*(.*?)(?:\(|$)/m);
+    if(!titleMatch) continue;
+    const promptMatch = section.match(/>\s*([\s\S]*?)(?=\n\n|\n\*\*)/);
+    const dialogueMatch = section.match(/\*\*Dialogue.*?\*\*\s*:?\s*"?(.*?)"?\s*$/m);
+    const voixMatch = section.match(/\*\*Voix off.*?\*\*\s*:?\s*"?(.*?)"?\s*$/m);
+    const dureeMatch = section.match(/\*\*Dur..?e\s*:\*\*\s*(\d+)/);
+    const texteMatch = section.match(/\*\*Texte.*?\*\*\s*:?\s*(.*?)$/m);
+    const prompt = promptMatch ? promptMatch[1].trim() : "";
+    const analysis = analyzeShot(prompt);
+    result.push({
+      number: parseInt(titleMatch[1]),
+      title: titleMatch[2].trim(),
+      duration: dureeMatch ? parseInt(dureeMatch[1]) : 5,
+      prompt, analysis,
+      dialogue: dialogueMatch ? dialogueMatch[1].trim() : "",
+      voixOff: voixMatch ? voixMatch[1].trim() : "",
+      texte: texteMatch ? texteMatch[1].trim() : "",
+      recommendations: recommendProviders(analysis),
+      // Generation state
+      genStatus: "idle",
+      taskId: null,
+      videoUrl: null,
+      genError: null
+    });
+  }
+  return result;
+}
+
+// ============================================================
+// UI RENDERING
+// ============================================================
+function renderProvidersBar() {
+  const el = document.getElementById("providersBar");
+  el.innerHTML = AI_PROVIDERS.slice(0,6).map(p =>
+    `<div class="provider-chip" style="border:1px solid ${p.color}30">
+      <div class="logo" style="background:${p.color}">${p.logo}</div>
+      <span>${p.name}</span>
+    </div>`
+  ).join("");
+}
+
+function renderTimeline() {
+  const total = shots.reduce((a,s) => a+s.duration, 0);
+  document.getElementById("totalDuration").textContent = total+"s total";
+  document.getElementById("endTime").textContent = `0:${total<10?"0"+total:total}`;
+  document.getElementById("timeline").innerHTML = shots.map((s,i) => {
+    const w = (s.duration/total)*100;
+    const c = s.recommendations[0].provider.color;
+    return `<div class="timeline-block ${i===selectedShot?"selected":""}" style="width:${w}%;background:${i===selectedShot?c:c+"80"}" onclick="selectShot(${i})">
+      <span class="num">S${s.number}</span><span class="dur">${s.duration}s</span>
+    </div>`;
+  }).join("");
+}
+
+function renderShotsList() {
+  document.getElementById("shotsList").innerHTML = shots.map((s,i) => {
+    const top = s.recommendations[0];
+    const a = s.analysis;
+    const tags = [];
+    if(a.hasAnimal) tags.push({l:a.animalType==="cat"?"Chat":a.animalType==="dog"?"Chien":"Chat+Chien",c:"#00b894"});
+    if(a.hasPerson) tags.push({l:"Personne",c:"#6c5ce7"});
+    if(a.hasSunlight) tags.push({l:"Soleil",c:"#fdcb6e"});
+    if(a.hasMotion) tags.push({l:a.cameraMove||"Motion",c:"#e17055"});
+    if(a.isSelfie) tags.push({l:"Selfie",c:"#a29bfe"});
+    if(a.isCollage) tags.push({l:"Collage",c:"#fd79a8"});
+    if(a.isStatic) tags.push({l:"Statique",c:"#636e72"});
+
+    // Badge d'etat de generation
+    let genBadge = "";
+    if(s.videoUrl) genBadge = `<span class="tag" style="background:#00b89415;color:#00b894">Video prete</span>`;
+    else if(s.genStatus === "RUNNING" || s.genStatus === "PENDING" || s.genStatus === "THROTTLED") genBadge = `<span class="tag" style="background:#e1705515;color:#e17055">En cours...</span>`;
+    else if(s.genStatus === "FAILED") genBadge = `<span class="tag" style="background:#c6282815;color:#c62828">Echec</span>`;
+
+    return `<div class="shot-card ${i===selectedShot?"selected":""}" style="${i===selectedShot?`border:2px solid ${top.provider.color};box-shadow:0 4px 20px ${top.provider.color}20`:""}" onclick="selectShot(${i})">
+      <div class="shot-card-header">
+        <div>
+          <div class="shot-meta">SHOT ${s.number} | ${s.duration}s</div>
+          <div class="shot-title">${s.title}</div>
+        </div>
+        <div class="provider-badge" style="background:${top.provider.color}">${top.provider.logo}</div>
+      </div>
+      <div class="tags">${tags.map(t=>`<span class="tag" style="background:${t.c}15;color:${t.c}">${t.l}</span>`).join("")}${genBadge}</div>
+      ${s.prompt?`<div class="prompt-preview">${s.prompt.substring(0,120)}${s.prompt.length>120?"...":""}</div>`:""}
+      ${s.dialogue?`<div class="dialogue">"${s.dialogue}"</div>`:""}
+      ${s.videoUrl?`<div style="margin-top:6px;font-size:10px;color:#00b894;font-weight:700">VIDEO GENEREE</div>`:""}
+    </div>`;
+  }).join("");
+}
+
+function renderRightPanel() {
+  const s = shots[selectedShot];
+  if(!s) return;
+  const top = s.recommendations[0];
+  const a = s.analysis;
+  let html = `
+    <div class="shot-number">SHOT ${s.number} | ${s.duration} SECONDES</div>
+    <h2>${s.title}</h2>`;
+
+  if(s.prompt) {
+    html += `<div class="prompt-box">
+      <div class="label">PROMPT HIGGSFIELD</div>
+      <div class="text">${s.prompt}</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <button class="copy-btn" onclick="copyPrompt(${selectedShot})">Copier le prompt</button>
+        ${getGenButton(selectedShot)}
+      </div>
+    </div>`;
+
+    // Video preview si deja genere
+    if(s.videoUrl) {
+      html += `<div class="video-preview">
+        <video src="${s.videoUrl}" controls autoplay loop muted></video>
+        <a href="${s.videoUrl}" target="_blank" class="download-link">Telecharger la video</a>
+      </div>`;
+    }
+
+    // Statut de generation en cours
+    if(s.genStatus && s.genStatus !== "SUCCEEDED" && s.genStatus !== "idle") {
+      const cls = s.genStatus.toLowerCase();
+      const msgs = { PENDING: "En file d'attente...", THROTTLED: "En file d'attente (throttled)...", RUNNING: "Generation en cours..." };
+      html += `<div class="gen-status ${cls}">
+        <div class="gen-spinner"></div>
+        ${msgs[s.genStatus] || s.genStatus}
+      </div>`;
+    }
+    if(s.genStatus === "FAILED") {
+      html += `<div class="gen-status failed">Echec de la generation. ${s.genError||""}</div>`;
+    }
+  }
+
+  if(s.dialogue || s.voixOff) {
+    html += `<div class="dialogue-box">`;
+    if(s.dialogue) html += `<div><span class="label" style="color:#6c5ce7">DIALOGUE : </span><span class="text">"${s.dialogue}"</span></div>`;
+    if(s.voixOff) html += `<div style="margin-top:${s.dialogue?8:0}px"><span class="label" style="color:#e17055">VOIX OFF : </span><span class="text">"${s.voixOff}"</span></div>`;
+    html += `</div>`;
+  }
+
+  if(currentTab === "reco") {
+    // Score bars
+    const scores = [
+      {l:"Difficulte animaux", v:a.hasAnimal?8:2, c:"#00b894"},
+      {l:"Complexite lumiere", v:a.hasSunlight?9:5, c:"#fdcb6e"},
+      {l:"Mouvement camera", v:a.hasMotion?7:2, c:"#e17055"},
+      {l:"Complexite globale", v:a.complexity==="high"?9:a.complexity==="medium"?6:3, c:"#6c5ce7"}
+    ];
+    html += `<div class="section-label">ANALYSE DU SHOT</div><div class="score-card">${scores.map(sc=>
+      `<div class="score-row">
+        <div class="score-header"><span class="score-label">${sc.l}</span><span class="score-value" style="color:${sc.c}">${sc.v}/10</span></div>
+        <div class="score-track"><div class="score-fill" style="width:${sc.v*10}%;background:linear-gradient(90deg,${sc.c},${sc.c}99)"></div></div>
+      </div>`
+    ).join("")}</div>`;
+
+    html += `<div class="section-label">OUTILS IA RECOMMANDES</div>`;
+    html += s.recommendations.slice(0,5).map((r,i) => {
+      const isTop = i===0;
+      return `<div class="reco-card ${isTop?"top":""}" style="${isTop?`background:${r.provider.color}10;border-color:${r.provider.color}`:``}">
+        <div class="reco-logo" style="background:${r.provider.color}">${r.provider.logo}</div>
+        <div class="reco-info">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="reco-name">${r.provider.name}</span>
+            <span class="reco-score" style="color:${isTop?r.provider.color:"#6c757d"};background:${isTop?r.provider.color+"15":"#f1f3f5"}">${r.score}pts</span>
+          </div>
+          <div class="reco-pricing">${r.provider.pricing}</div>
+          ${isTop && r.reasons.length?`<div class="reco-reasons" style="color:${r.provider.color}">${r.reasons.slice(0,2).join(" | ")}</div>`:""}
+        </div>
+      </div>`;
+    }).join("");
+
+  } else if(currentTab === "keys") {
+    html += `<div class="section-label">CLES API CONFIGUREES</div>`;
+    html += AI_PROVIDERS.map(p => {
+      const hasKey = apiKeys[p.id] && apiKeys[p.id].length > 0;
+      let row = `<div class="api-key-row" style="${hasKey?`background:${p.color}08;border-color:${p.color}30`:""}">
+        <div class="key-logo" style="background:${p.color}">${p.logo}</div>
+        <div class="key-info">
+          <div class="key-name">${p.name}</div>
+          <div class="key-status" style="color:${hasKey?"#00b894":"#868e96"}">${hasKey?"${"*".repeat(16)}"+apiKeys[p.id].slice(-4):"Non configuree"}</div>
+        </div>
+        <input type="password" id="key_${p.id}" placeholder="${p.id==="kling"?"Access Key...":"sk-..."}" value="${apiKeys[p.id]||""}" style="max-width:200px" onchange="saveKey('${p.id}',this.value)">
+        <a href="${p.docUrl}" target="_blank" class="key-btn" style="background:${p.color}15;color:${p.color};text-decoration:none">Docs</a>
+      </div>`;
+      // Kling : ajouter un champ Secret Key
+      if (p.id === "kling") {
+        const hasSk = klingSecretKey && klingSecretKey.length > 0;
+        row += `<div class="api-key-row" style="${hasSk?`background:${p.color}08;border-color:${p.color}30`:""}; margin-top:-2px; border-top:none; border-top-left-radius:0; border-top-right-radius:0;">
+          <div class="key-logo" style="background:${p.color};font-size:8px">SK</div>
+          <div class="key-info">
+            <div class="key-name">Kling Secret Key</div>
+            <div class="key-status" style="color:${hasSk?"#00b894":"#868e96"}">${hasSk?"${"*".repeat(16)}"+klingSecretKey.slice(-4):"Non configuree"}</div>
+          </div>
+          <input type="password" id="key_kling_secret" placeholder="Secret Key..." value="${klingSecretKey}" style="max-width:200px" onchange="klingSecretKey=this.value">
+          <span class="key-btn" style="background:#00b89415;color:#00b894;font-size:10px">JWT</span>
+        </div>`;
+      }
+      return row;
+    }).join("");
+
+  } else if(currentTab === "budget") {
+    const totalSec = shots.reduce((a,s) => a+s.duration, 0);
+    html += `<div class="section-label">ESTIMATION BUDGET (3 iterations/shot)</div>`;
+    html += `<div class="budget-card"><h3>${shots.length} shots | ${totalSec}s total | x3 iterations</h3>`;
+    html += AI_PROVIDERS.map(p => {
+      const m = p.pricing.match(/\$(\d+\.?\d*)\/(sec|video)/);
+      let cost = 0;
+      if(m) { cost = m[2]==="sec" ? parseFloat(m[1])*totalSec*3 : parseFloat(m[1])*shots.length*3; }
+      return cost > 0 ? `<div class="budget-row"><span class="budget-name">${p.name}</span><span class="budget-price" style="color:${p.color}">$${cost.toFixed(2)}</span></div>` : "";
+    }).join("");
+    html += `</div>`;
+
+    html += `<div class="budget-card" style="margin-top:16px;background:#e8f5e9">
+      <h3 style="color:#2e7d32">Strategie optimale recommandee</h3>
+      <div style="font-size:13px;color:#495057;line-height:1.6">
+        Utiliser <b>Kling 3.0</b> pour les shots avec animaux (meilleur rendu),
+        <b>Runway Gen-4.5</b> pour les mouvements de camera,
+        et <b>Hailuo/MiniMax</b> pour les tests et iterations rapides.
+      </div>
+    </div>`;
+  }
+
+  document.getElementById("rightPanel").innerHTML = html;
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+function analyzeScript(text) {
+  const input = text || document.getElementById("scriptInput").value;
+  if(!input.trim()) return;
+  shots = parseScript(input);
+  if(shots.length === 0) { alert("Aucun shot detecte. Verifiez le format (### SHOT 1 - ...)"); return; }
+  selectedShot = 0;
+  document.getElementById("shotCount").textContent = shots.length + " shots analyses";
+  document.getElementById("dropView").classList.add("hidden");
+  document.getElementById("analysisView").classList.add("active");
+  renderTimeline();
+  renderShotsList();
+  renderRightPanel();
+}
+
+function selectShot(i) { selectedShot = i; renderTimeline(); renderShotsList(); renderRightPanel(); }
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab===tab));
+  renderRightPanel();
+}
+function goBack() {
+  document.getElementById("dropView").classList.remove("hidden");
+  document.getElementById("analysisView").classList.remove("active");
+}
+function saveKey(id, val) { apiKeys[id] = val; }
+function copyPrompt(i) {
+  navigator.clipboard.writeText(shots[i].prompt).then(() => {
+    const btn = document.querySelector(".copy-btn");
+    btn.textContent = "Copie !"; setTimeout(()=>btn.textContent="Copier le prompt",1500);
+  });
+}
+
+// ============================================================
+// MULTI-PROVIDER GENERATION ENGINE (Kling, Sora, Runway)
+// ============================================================
+let selectedProvider = "kling"; // Default provider
+
+// JWT Generation for Kling (HMAC-SHA256)
+function base64url(str) {
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function base64urlBytes(arr) {
+  let binary = "";
+  const bytes = new Uint8Array(arr);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function generateKlingJWT(accessKey, secretKey) {
+  const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const now = Math.floor(Date.now() / 1000);
+  const payload = base64url(JSON.stringify({
+    iss: accessKey,
+    exp: now + 1800,
+    nbf: now - 5
+  }));
+  const message = header + "." + payload;
+  const enc = new TextEncoder();
+  const keyData = await crypto.subtle.importKey("raw", enc.encode(secretKey), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", keyData, enc.encode(message));
+  return message + "." + base64urlBytes(signature);
+}
+
+const GEN_PROVIDERS = {
+  kling: {
+    name: "Kling",
+    color: "#00b894",
+    keyId: "kling",
+    needsSecret: true,
+    createUrl: "https://api.klingai.com/v1/videos/text2video",
+    pollUrl: (taskId) => "https://api.klingai.com/v1/videos/text2video/" + taskId,
+    buildBody: (prompt, duration) => ({
+      model_name: "kling-v2-master",
+      prompt: prompt,
+      duration: duration <= 7 ? "5" : "10",
+      aspect_ratio: "16:9",
+      mode: "pro"
+    }),
+    buildHeaders: (token) => ({
+      "Authorization": "Bearer " + token,
+      "Content-Type": "application/json"
+    }),
+    extractTaskId: (data) => data.data ? data.data.task_id : data.task_id || data.id,
+    extractStatus: (data) => {
+      const s = data.data ? data.data.task_status : data.status || data.task_status;
+      if (s === "succeed" || s === "completed") return "SUCCEEDED";
+      if (s === "failed") return "FAILED";
+      if (s === "processing" || s === "running" || s === "submitted") return "RUNNING";
+      return (s || "PENDING").toUpperCase();
+    },
+    extractVideoUrl: (data) => {
+      const d = data.data || data;
+      if (d.task_result && d.task_result.videos && d.task_result.videos[0]) return d.task_result.videos[0].url;
+      if (d.videos && d.videos[0]) return d.videos[0].url;
+      if (d.output) return typeof d.output === "string" ? d.output : d.output[0];
+      return null;
+    },
+    extractError: (data) => {
+      const d = data.data || data;
+      return d.task_status_msg || d.error || d.message || "Echec";
+    }
+  },
+  sora: {
+    name: "Sora",
+    color: "#1a1a2e",
+    keyId: "sora",
+    createUrl: "https://api.openai.com/v1/videos/generations",
+    pollUrl: (taskId) => "https://api.openai.com/v1/videos/generations/" + taskId,
+    buildBody: (prompt, duration) => ({
+      model: "sora-2",
+      prompt: prompt,
+      size: "1280x720",
+      n: 1
+    }),
+    buildHeaders: (key) => ({
+      "Authorization": "Bearer " + key,
+      "Content-Type": "application/json"
+    }),
+    extractTaskId: (data) => data.id,
+    extractStatus: (data) => {
+      if (data.status === "completed") return "SUCCEEDED";
+      if (data.status === "failed") return "FAILED";
+      return (data.status || "PENDING").toUpperCase();
+    },
+    extractVideoUrl: (data) => {
+      if (data.data && data.data[0]) return data.data[0].url;
+      if (data.output) return typeof data.output === "string" ? data.output : data.output[0];
+      if (data.url) return data.url;
+      return null;
+    },
+    extractError: (data) => data.error ? (data.error.message || JSON.stringify(data.error)) : "Echec"
+  },
+  runway: {
+    name: "Runway",
+    color: "#6c5ce7",
+    keyId: "runway",
+    createUrl: "https://api.dev.runwayml.com/v1/text_to_video",
+    pollUrl: (taskId) => "https://api.dev.runwayml.com/v1/tasks/" + taskId,
+    buildBody: (prompt, duration) => ({
+      model: "gen4.5",
+      promptText: prompt,
+      ratio: "1280:720",
+      duration: duration <= 7 ? 5 : 10
+    }),
+    buildHeaders: (key) => ({
+      "Authorization": "Bearer " + key,
+      "Content-Type": "application/json",
+      "X-Runway-Version": "2024-11-06"
+    }),
+    extractTaskId: (data) => data.id,
+    extractStatus: (data) => (data.status || "PENDING").toUpperCase(),
+    extractVideoUrl: (data) => {
+      if (data.output && data.output[0]) return data.output[0];
+      if (data.artifacts && data.artifacts[0]) return data.artifacts[0].url;
+      return typeof data.output === "string" ? data.output : null;
+    },
+    extractError: (data) => data.failure || data.error || data.message || "Echec"
+  }
+};
+
+function getActiveKey() {
+  return apiKeys[GEN_PROVIDERS[selectedProvider].keyId] || "";
+}
+
+function getGenButton(shotIndex) {
+  const s = shots[shotIndex];
+  if (!s) return "";
+
+  // Selecteur de fournisseur
+  const provSelect = `<select onchange="selectedProvider=this.value;renderRightPanel()" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid #dee2e6;background:#fff;font-weight:600;cursor:pointer">
+    ${Object.entries(GEN_PROVIDERS).map(([id,p]) => `<option value="${id}" ${id===selectedProvider?"selected":""}>${p.name}</option>`).join("")}
+  </select>`;
+
+  const key = getActiveKey();
+  const prov = GEN_PROVIDERS[selectedProvider];
+
+  if (!key) return `${provSelect} <span style="font-size:11px;color:#868e96;font-style:italic">Ajoutez votre cle ${prov.name} dans l'onglet Cles</span>`;
+
+  if (s.genStatus === "PENDING" || s.genStatus === "THROTTLED" || s.genStatus === "RUNNING") {
+    return `${provSelect} <button class="gen-btn generating" disabled>Generation en cours...</button>`;
+  }
+  if (s.videoUrl) {
+    return `${provSelect} <button class="gen-btn" onclick="generateShot(${shotIndex})" style="background:linear-gradient(135deg,${prov.color},${prov.color}99)">Regenerer</button>`;
+  }
+  return `${provSelect} <button class="gen-btn" onclick="generateShot(${shotIndex})" style="background:linear-gradient(135deg,${prov.color},${prov.color}99)">Generer avec ${prov.name}</button>`;
+}
+
+async function generateShot(shotIndex) {
+  const s = shots[shotIndex];
+  const prov = GEN_PROVIDERS[selectedProvider];
+  const key = getActiveKey();
+  if (!key) { alert("Cle API " + prov.name + " manquante. Allez dans l'onglet Cles API."); return; }
+  if (!s.prompt) { alert("Pas de prompt pour ce shot."); return; }
+
+  // Kling : generer un JWT a partir de Access Key + Secret Key
+  let authToken = key;
+  if (prov.needsSecret) {
+    if (!klingSecretKey) { alert("Secret Key Kling manquante. Allez dans l'onglet Cles API."); return; }
+    try {
+      authToken = await generateKlingJWT(key, klingSecretKey);
+      console.log("JWT Kling genere avec succes");
+    } catch(e) {
+      alert("Erreur generation JWT Kling : " + e.message);
+      return;
+    }
+  }
+
+  s.genStatus = "PENDING";
+  s.genError = null;
+  s.taskId = null;
+  s.genProvider = selectedProvider;
+  s.authToken = authToken;
+  renderRightPanel();
+  renderShotsList();
+
+  try {
+    const body = prov.buildBody(s.prompt, s.duration);
+    console.log(prov.name + " REQUEST:", JSON.stringify(body, null, 2));
+
+    // Passer par le proxy local pour eviter le CORS
+    const proxyHeaders = {
+      "Content-Type": "application/json",
+      "X-Target-Url": prov.createUrl,
+      "X-Provider": selectedProvider
+    };
+    if (selectedProvider === "kling") {
+      proxyHeaders["X-Kling-Access-Key"] = apiKeys["kling"] || "";
+      proxyHeaders["X-Kling-Secret-Key"] = klingSecretKey || "";
+    } else {
+      proxyHeaders["Authorization"] = "Bearer " + authToken;
+      if (selectedProvider === "runway") proxyHeaders["X-Runway-Version"] = "2024-11-06";
+    }
+
+    const resp = await fetch("http://localhost:3456/", {
+      method: "POST",
+      headers: proxyHeaders,
+      body: JSON.stringify(body)
+    });
+
+    const respText = await resp.text();
+    console.log(prov.name + " RESPONSE:", resp.status, respText);
+
+    if (!resp.ok) {
+      let errMsg = "Erreur HTTP " + resp.status;
+      try { const j = JSON.parse(respText); errMsg = j.error ? (j.error.message || JSON.stringify(j.error)) : j.message || JSON.stringify(j); } catch(e) { errMsg = respText || errMsg; }
+      throw new Error(errMsg);
+    }
+
+    const data = JSON.parse(respText);
+    s.taskId = prov.extractTaskId(data);
+    s.genStatus = "RUNNING";
+    renderRightPanel();
+    renderShotsList();
+
+    pollTaskStatus(shotIndex);
+
+  } catch (err) {
+    s.genStatus = "FAILED";
+    s.genError = err.message;
+    renderRightPanel();
+    renderShotsList();
+    console.error(prov.name + " API error:", err);
+  }
+}
+
+async function pollTaskStatus(shotIndex) {
+  const s = shots[shotIndex];
+  if (!s.taskId) return;
+
+  const prov = GEN_PROVIDERS[s.genProvider || selectedProvider];
+  const token = s.authToken || apiKeys[prov.keyId] || "";
+  const maxAttempts = 120;
+  let attempts = 0;
+
+  const poll = async () => {
+    if (attempts >= maxAttempts) {
+      s.genStatus = "FAILED";
+      s.genError = "Timeout apres 10 minutes";
+      renderRightPanel();
+      return;
+    }
+    attempts++;
+
+    try {
+      // Polling via proxy
+      const pollProxyHeaders = {
+        "Content-Type": "application/json",
+        "X-Target-Url": prov.pollUrl(s.taskId),
+        "X-Provider": s.genProvider || selectedProvider
+      };
+      if ((s.genProvider || selectedProvider) === "kling") {
+        pollProxyHeaders["X-Kling-Access-Key"] = apiKeys["kling"] || "";
+        pollProxyHeaders["X-Kling-Secret-Key"] = klingSecretKey || "";
+      } else {
+        pollProxyHeaders["Authorization"] = "Bearer " + token;
+        if ((s.genProvider || selectedProvider) === "runway") pollProxyHeaders["X-Runway-Version"] = "2024-11-06";
+      }
+      const resp = await fetch("http://localhost:3456/", {
+        method: "GET",
+        headers: pollProxyHeaders
+      });
+
+      if (!resp.ok) throw new Error("Erreur polling HTTP " + resp.status);
+
+      const data = await resp.json();
+      console.log(prov.name + " POLL:", JSON.stringify(data).substring(0, 300));
+      s.genStatus = prov.extractStatus(data);
+
+      if (s.genStatus === "SUCCEEDED") {
+        s.videoUrl = prov.extractVideoUrl(data);
+        renderRightPanel();
+        renderShotsList();
+        return;
+      }
+
+      if (s.genStatus === "FAILED") {
+        s.genError = prov.extractError(data);
+        renderRightPanel();
+        renderShotsList();
+        return;
+      }
+
+      renderRightPanel();
+      setTimeout(poll, 5000);
+
+    } catch (err) {
+      s.genStatus = "FAILED";
+      s.genError = err.message;
+      renderRightPanel();
+      renderShotsList();
+      console.error("Poll error:", err);
+    }
+  };
+
+  setTimeout(poll, 3000);
+}
+
+let genAllRunning = false;
+let genAllAbort = false;
+
+async function generateAllShots() {
+  const key = getActiveKey();
+  const prov = GEN_PROVIDERS[selectedProvider];
+  if (!key) { alert("Cle API " + prov.name + " manquante. Allez dans l'onglet Cles API."); return; }
+
+  if (genAllRunning) { genAllAbort = true; return; }
+  genAllRunning = true;
+  genAllAbort = false;
+
+  for (let i = 0; i < shots.length; i++) {
+    if (genAllAbort) { console.log("Generation interrompue par l'utilisateur"); break; }
+    if (!shots[i].videoUrl && shots[i].prompt) {
+      await generateShot(i);
+      // Attendre que le shot soit termine (polling) avant de lancer le suivant
+      while (shots[i].genStatus === "PENDING" || shots[i].genStatus === "RUNNING") {
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      // Delai entre chaque requete pour eviter "parallel task over resource pack limit"
+      if (i < shots.length - 1) {
+        console.log("Attente 5s avant le shot suivant (anti rate-limit)...");
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    }
+  }
+  genAllRunning = false;
+  genAllAbort = false;
+  renderRightPanel();
+}
+
+// ============================================================
+// TELECHARGEMENT & ASSEMBLAGE DES VIDEOS
+// ============================================================
+async function downloadAllVideos() {
+  const generated = shots.filter(s => s.videoUrl);
+  if (generated.length === 0) { alert("Aucune video generee a telecharger."); return; }
+
+  showLoading("Telechargement des videos...", "0 / " + generated.length);
+  const filenames = [];
+
+  for (let i = 0; i < shots.length; i++) {
+    const s = shots[i];
+    if (!s.videoUrl) continue;
+    const fname = "shot_" + String(i + 1).padStart(2, "0") + ".mp4";
+    updateProgress(Math.round((filenames.length / generated.length) * 90), `Shot ${i + 1} : ${fname}`);
+    try {
+      const resp = await fetch("http://localhost:3456/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: s.videoUrl, filename: fname })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        filenames.push(fname);
+        s.localFile = fname;
+        console.log("Downloaded:", fname, Math.round(data.size / 1024) + " KB");
+      } else {
+        console.error("Download error for shot " + (i + 1) + ":", data.error);
+      }
+    } catch (err) {
+      console.error("Download error for shot " + (i + 1) + ":", err.message);
+    }
+  }
+
+  updateProgress(100, filenames.length + " videos telechargees");
+  hideLoading();
+  renderShotsList();
+  return filenames;
+}
+
+async function assembleVideos() {
+  // D'abord telecharger toutes les videos
+  const filenames = await downloadAllVideos();
+  if (!filenames || filenames.length === 0) { alert("Aucune video a assembler."); return; }
+
+  showLoading("Assemblage des videos...", filenames.length + " clips");
+  updateProgress(50, "ffmpeg en cours...");
+
+  try {
+    const resp = await fetch("http://localhost:3456/assemble", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: filenames,
+        output: "friskies_assembled.mp4"
+      })
+    });
+    const data = await resp.json();
+    updateProgress(100, "Termine !");
+    hideLoading();
+
+    if (data.success) {
+      alert("Video assemblee avec succes !\n\nFichier : " + data.filename + "\nTaille : " + Math.round(data.size / 1024) + " KB\n\nDossier : AI-Director-App/videos/");
+      // Ouvrir le lien de telechargement
+      window.open("http://localhost:3456/serve?file=" + encodeURIComponent(data.filename), "_blank");
+    } else {
+      alert("Erreur d'assemblage : " + data.error);
+    }
+  } catch (err) {
+    hideLoading();
+    alert("Erreur : " + err.message + "\n\nVerifiez que ffmpeg est installe (brew install ffmpeg)");
+  }
+}
+
+// DEMO SCRIPT - MY FRISKIES 30" FR
+function loadDemo() {
+  const demo = `### SHOT 1 - Ouverture pack Friskies (0:00 - 0:05)
+**Duree :** 5 secondes
+
+> Close-up of a Purina Friskies dry food bag on a wooden kitchen shelf. Golden morning sunlight streams through a window, casting warm highlights and a soft lens flare across the pack. A ginger tabby cat jumps onto the shelf and sniffs the bag curiously. Slow dolly-in. Warm, inviting, domestic atmosphere. Photorealistic, cinematic color grading. 16:9.
+
+**Texte superpose :** Logo Purina Friskies
+
+### SHOT 2 - Golden Retriever qui court (0:05 - 0:10)
+**Duree :** 5 secondes
+
+> Medium shot, eye level. A happy Golden Retriever runs toward the camera through a sunlit garden with green grass and blooming flowers. Ears bouncing, tongue out, tail wagging, natural joyful energy. Shallow depth of field, golden hour backlight creating a warm halo around the dog. Slow motion. Trees in soft focus behind. Handheld feel with subtle breathing movement. Photorealistic. 16:9.
+
+**Voix off :** "Et vous, pourquoi choisissez-vous Friskies ?"
+
+### SHOT 3 - Temoignage proprietaire chien (0:10 - 0:15)
+**Duree :** 5 secondes
+
+> Medium close-up, slightly off-center framing. A warm, natural-looking man in his 30s sits in a sunlit garden with his adult Golden Retriever beside him. The dog rests its head on the man's lap. Soft morning backlight creates a warm halo. The man looks toward someone just off-camera, speaking naturally with a gentle smile. Shallow depth of field, green foliage in background. Handheld, subtle breathing movement. Photorealistic, documentary style. 16:9.
+
+**Dialogue :** "Parce qu'il adore et en plus c'est complet et equilibre"
+
+### SHOT 4 - Temoignage jardin potager (0:15 - 0:20)
+**Duree :** 5 secondes
+
+> Medium shot. A woman in her 40s stands in a lush vegetable garden, natural light filtering through leaves. She wears simple comfortable clothing in earth tones. Green plants and herbs surround her. She speaks to someone off-camera with a confident calm expression. Soft wind moves her hair. Dappled sunlight patterns on her face. Gentle stabilized camera movement. Warm organic authentic feel. Photorealistic. 16:9.
+
+**Dialogue :** "C'est des ingredients de qualite. Et Friskies s'engage a ameliorer la sante des sols"
+
+### SHOT 5 - Temoignage tradition familiale (0:20 - 0:25)
+**Duree :** 5 secondes
+
+> Medium close-up. An elderly man in his 70s sits on a wooden bench in a rustic garden. He holds a small Jack Russell puppy gently in his arms. Weathered hands, kind eyes, relaxed posture. Late afternoon golden light creates deep warm tones. Background is a stone farmhouse with climbing plants. He speaks softly and nostalgically. Slight handheld movement. Photorealistic, intimate documentary tone. 16:9.
+
+**Dialogue :** "Depuis que je suis petit, il y a toujours eu Friskies chez nous"
+
+### SHOT 6 - Selfie jeune homme et chat (0:25 - 0:30)
+**Duree :** 5 secondes
+
+> Close-up selfie style. A young man in his late 20s films himself in a bright modern kitchen. He holds the phone slightly above eye level. A ginger tabby cat walks across the kitchen counter behind him, then rubs its head against his arm. Natural window light, clean apartment. He speaks directly to camera with an easy genuine smile. Slight phone movement, authentic selfie aesthetic. Warm tones. Photorealistic. 16:9.
+
+**Dialogue :** "Je prefere les ingredients naturels et je sais que Friskies en contient"
+
+### SHOT 7 - Collage My Friskies (0:30 - 0:35)
+**Duree :** 5 secondes
+
+> Split screen mosaic of 6 diverse people with their pets, all looking at camera with warm smiles. Each person in their own environment: sunlit apartment, garden with flowers, cozy living room, park with trees, bright kitchen, rustic farmhouse. Mix of ginger cats, Golden Retrievers and Jack Russell dogs. Golden warm light in every frame. Each person mouths the words My Friskies. Joyful communal energy. Clean grid layout. Photorealistic. 16:9.
+
+**Voix off :** "Mon Friskies... Mon Friskies... Mon Friskies"
+
+### SHOT 8 - End card (0:35 - 0:40)
+**Duree :** 5 secondes
+
+> Bright yellow background with the Purina Friskies logo prominently displayed center frame. Subtle animated golden sun rays radiate from behind the logo. A ginger cat and a Golden Retriever sit side by side below the logo, looking up at camera. Clean bold typography. Premium brand finish. Warm yellow and green color palette. 16:9.
+
+**Texte superpose :** "Et vous, pourquoi choisissez-vous Friskies ?"`;
+  document.getElementById("scriptInput").value = demo;
+  analyzeScript(demo);
+}
+
+// ============================================================
+// PDF EXTRACTION ENGINE
+// ============================================================
+let pdfjsLib = null;
+
+async function loadPdfJs() {
+  if (pdfjsLib) return pdfjsLib;
+  try {
+    pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs";
+    return pdfjsLib;
+  } catch(e) {
+    console.error("PDF.js load error:", e);
+    return null;
+  }
+}
+
+function showLoading(msg, sub) {
+  document.getElementById("loadingMsg").textContent = msg || "Chargement...";
+  document.getElementById("loadingSub").textContent = sub || "";
+  document.getElementById("progressFill").style.width = "0%";
+  document.getElementById("loadingOverlay").classList.add("active");
+}
+function updateProgress(pct, sub) {
+  document.getElementById("progressFill").style.width = pct + "%";
+  if(sub) document.getElementById("loadingSub").textContent = sub;
+}
+function hideLoading() {
+  document.getElementById("loadingOverlay").classList.remove("active");
+}
+
+async function extractPdfText(arrayBuffer) {
+  const lib = await loadPdfJs();
+  if (!lib) throw new Error("PDF.js non disponible");
+
+  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+  const totalPages = pdf.numPages;
+  let fullText = "";
+
+  for (let i = 1; i <= totalPages; i++) {
+    updateProgress(Math.round((i / totalPages) * 80), `Page ${i} / ${totalPages}`);
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(" ");
+    if (pageText.trim()) {
+      fullText += `\n--- PAGE ${i} ---\n${pageText}\n`;
+    }
+  }
+  return fullText;
+}
+
+// ============================================================
+// PDF BRIEF TO SHOTS CONVERTER (GENERIQUE)
+// ============================================================
+function convertBriefToShots(pdfText) {
+  // Detecter si c'est un script Higgsfield deja formate
+  if (/###\s*SHOT/i.test(pdfText)) {
+    return pdfText;
+  }
+
+  updateProgress(85, "Analyse du document...");
+
+  // Extraire les paragraphes significatifs du PDF
+  const pages = pdfText.split(/---\s*PAGE\s*\d+\s*---/).filter(p => p.trim().length > 30);
+  const allText = pages.join("\n");
+
+  // Detecter le titre/marque du document
+  const firstLines = allText.substring(0, 500);
+  let brand = "Production";
+  const brandMatch = firstLines.match(/(?:^|\n)\s*([A-Z][A-Za-z0-9\s&'.!-]{3,40})\s*(?:\n|$)/m);
+  if (brandMatch) brand = brandMatch[1].trim();
+
+  // Detecter les scenes/sections dans le document
+  // Chercher des patterns comme : numeros, titres en majuscules, descriptions visuelles
+  const scenes = [];
+
+  // Pattern 1 : Sections numerotees (Scene 1, Shot 1, Sequence 1, 1., 1), etc.)
+  const numberedSections = allText.split(/(?:^|\n)\s*(?:sc[eè]ne|shot|sequence|seq|s[eé]quence|plan)?\s*(?:#?\d+[\.\)\-:\s])/i);
+
+  if (numberedSections.length > 2) {
+    for (let i = 1; i < numberedSections.length && scenes.length < 15; i++) {
+      const block = numberedSections[i].trim();
+      if (block.length > 20) {
+        scenes.push(block.substring(0, 600));
+      }
+    }
+  }
+
+  // Pattern 2 : Si pas de sections numerotees, decouper par pages ou paragraphes
+  if (scenes.length < 2) {
+    const paragraphs = allText.split(/\n\s*\n/).filter(p => p.trim().length > 40);
+    for (let i = 0; i < paragraphs.length && scenes.length < 12; i++) {
+      const p = paragraphs[i].trim();
+      // Garder les paragraphes qui semblent descriptifs (pas les entetes techniques)
+      if (p.length > 40 && !/^(date|version|client|agency|format|ref|contact)/i.test(p)) {
+        scenes.push(p.substring(0, 600));
+      }
+    }
+  }
+
+  // Si toujours rien, prendre le texte brut et le diviser
+  if (scenes.length < 2) {
+    const chunks = allText.match(/.{100,500}(?:\s|$)/g) || [allText.substring(0, 500)];
+    for (let i = 0; i < Math.min(chunks.length, 8); i++) {
+      scenes.push(chunks[i].trim());
+    }
+  }
+
+  updateProgress(92, "Generation des shots...");
+
+  // Generer les shots a partir des scenes detectees
+  let script = "";
+  let timeOffset = 0;
+
+  for (let i = 0; i < scenes.length; i++) {
+    const sceneText = scenes[i].replace(/\s+/g, " ").trim();
+    const dur = Math.min(8, Math.max(3, Math.round(sceneText.length / 80)));
+
+    // Extraire un titre court de la scene
+    let title = sceneText.substring(0, 60).replace(/[^\w\s\u00C0-\u017F'-]/g, "").trim();
+    const dotIdx = title.indexOf(".");
+    if (dotIdx > 5 && dotIdx < 50) title = title.substring(0, dotIdx);
+
+    // Creer le prompt visuel a partir du texte de la scene
+    const prompt = sceneText.substring(0, 400) + ". Photorealistic, cinematic lighting, shallow depth of field. 16:9.";
+
+    script += `### SHOT ${i+1} - ${title} (${formatTime(timeOffset)} - ${formatTime(timeOffset+dur)})
+**Duree :** ${dur} secondes
+
+> ${prompt}
+
+`;
+    timeOffset += dur;
+  }
+
+  return script;
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s < 10 ? "0" + s : s}`;
+}
+
+// ============================================================
+// FILE HANDLING (PDF + TEXT)
+// ============================================================
+async function handleFile(file) {
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith(".pdf")) {
+    showLoading("Extraction du PDF en cours...", file.name);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      updateProgress(10, "Chargement de PDF.js...");
+      await loadPdfJs();
+      updateProgress(20, "Lecture du document...");
+      const rawText = await extractPdfText(arrayBuffer);
+      updateProgress(85, "Conversion en script...");
+      const scriptText = convertBriefToShots(rawText);
+      updateProgress(95, "Analyse des shots...");
+      document.getElementById("scriptInput").value = scriptText;
+      hideLoading();
+      analyzeScript(scriptText);
+    } catch (err) {
+      hideLoading();
+      alert("Erreur lors de la lecture du PDF : " + err.message);
+      console.error(err);
+    }
+  } else {
+    // Fichier texte classique (.md, .txt)
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById("scriptInput").value = ev.target.result;
+      analyzeScript(ev.target.result);
+    };
+    reader.readAsText(file);
+  }
+}
+
+// DRAG & DROP
+const dropZone = document.getElementById("dropZone");
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault(); dropZone.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+// Bouton fichier classique (en plus du drag&drop)
+const fileInput = document.createElement("input");
+fileInput.type = "file";
+fileInput.accept = ".pdf,.md,.txt";
+fileInput.style.display = "none";
+fileInput.addEventListener("change", e => { if(e.target.files[0]) handleFile(e.target.files[0]); });
+document.body.appendChild(fileInput);
+
+dropZone.addEventListener("click", e => {
+  // Ne pas ouvrir le selecteur si on clique sur le textarea ou les boutons
+  if (e.target.tagName === "TEXTAREA" || e.target.tagName === "BUTTON") return;
+  fileInput.click();
+});
+
+document.getElementById("scriptInput").addEventListener("input", function() {
+  document.getElementById("analyzeBtn").disabled = !this.value.trim();
+});
+
+// INIT
+renderProvidersBar();
+</script>
+</body>
+</html>
