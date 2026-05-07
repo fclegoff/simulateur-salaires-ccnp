@@ -98,7 +98,14 @@
   .rules-article p{font-size:.76em;line-height:1.55;color:#333}
   .rules-article ul{font-size:.76em;line-height:1.55;color:#333;padding-left:14px}
   .rules-footer{font-size:.7em;color:#aaa;margin-top:10px;text-align:right}
-  @media(max-width:700px){.rules-grid{grid-template-columns:1fr}}
+  /* ─── Badge 6ème jour ───────────────────────────────────────────── */
+  .day-badge-6j{background:#e8f4fd;color:#1a5276;border:1px solid #a9cce3}
+  .sixj-lbl{font-size:.66em;cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-top:2px;color:#555;user-select:none}
+  /* ─── Heures anticipées warning ─────────────────────────────────── */
+  .ha-warn{color:#e67e22;font-weight:700}
+  /* ─── Indemnités card ───────────────────────────────────────────── */
+  .indem-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media(max-width:700px){.rules-grid{grid-template-columns:1fr}.indem-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -183,6 +190,8 @@
     <p class="info no-print">
       Calcul auto : base, supp +100% (au-dela 8h / Art. 34), majo dim./ferie +100% (Arts 41-42) auto-detecte sur la date.
       Majo nuit +50%/+100% (Art. 40) auto-calcule. Plafond majorations conventionnelles : 100% de la base (Art. 36).
+      <b>Art. 39</b> — Cochez "6e j. IDF" sur la ligne du 6e jour consecutif (majoJ auto-remplie).
+      <b>Art. 35</b> — Heures anticipees calculees automatiquement entre journees consecutives (repos &lt; 11h).
       <b>Le Lundi de Pentecote reste un jour ferie (Art. 43 — pas de journee de solidarite pour les intermittents).</b>
     </p>
     <div class="no-print" style="display:grid;grid-template-columns:120px 80px 65px 80px 70px 70px 40px;gap:7px;padding:0 8px;margin-bottom:4px;">
@@ -216,6 +225,7 @@
           <th>Supp +100%<br><small>au-dela 8h</small></th>
           <th>Majo dim./ferie<br><small>+100%</small></th>
           <th>Majo nuit<br><small>+50%/+100%</small></th>
+          <th>H. antic.<br><small>Art.35 +100%</small></th>
           <th>Total jour</th>
         </tr>
       </thead>
@@ -233,6 +243,26 @@
       <div class="recap-box"><div class="val" id="r-jours">0</div><div class="lbl">Jours travailles</div></div>
     </div>
     <div class="formula" id="formula-text" style="margin-top:12px;"></div>
+  </div>
+
+  <!-- INDEMNITES REPAS (Art. 46) -->
+  <div class="card">
+    <h2>Indemnites de repas — Art. 46</h2>
+    <div class="indem-grid">
+      <div>
+        <label>Repas non fournis (grille 2025 : 20,07 EUR)</label>
+        <input type="number" id="nb-repas" value="0" min="0" step="1" onchange="recalc()"/>
+      </div>
+      <div>
+        <label>Casse-croutes (grille 2025 : 8,95 EUR)</label>
+        <input type="number" id="nb-cc" value="0" min="0" step="1" onchange="recalc()"/>
+      </div>
+      <div>
+        <label>Total indemnites (non soumis aux CS)</label>
+        <input type="text" id="total-indem" readonly style="background:#f0f4ff;font-weight:700;"/>
+      </div>
+    </div>
+    <p class="info no-print">Non soumis aux charges sociales. Grille SNTPCT 2025 : repas 20,07 EUR / casse-croute 8,95 EUR (accord mars 2024 : 18,56 / 7,54 EUR).</p>
   </div>
 
   <!-- ACTIONS -->
@@ -332,11 +362,12 @@
             Taux_h = Minima_8h / 8<br>
             Base = H_eff &times; Taux_h<br>
             Supp = max(H_eff &minus; 8, 0) &times; Taux_h &nbsp;&nbsp;[+100%]<br>
-            Majo_j = H_majo &times; Taux_h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[+100%]<br>
+            Majo_j = H_majo &times; Taux_h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[+100% conv. ou legal]<br>
             Majo_n = min(H_nuit,8)&times;Taux_h&times;0,5 + max(H_nuit-8,0)&times;Taux_h<br>
-            Cap_conv = Base &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Art. 36]<br>
-            Total = Base + min(Supp+Majo_j+Majo_n, Cap_conv)<br>
-            Cout = Total &times; (1 + Taux_CS)
+            Cap_conv = Base &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Art. 36]<br>
+            Brut = Base + min(Supp+Majo_j+Majo_n, Cap_conv)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ H_antic&times;Taux_h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Art. 35, legal, hors cap]<br>
+            Cout = Brut &times; (1 + Taux_CS) + Indem_repas
           </p>
         </div>
       </div>
@@ -361,8 +392,8 @@
 
   <!-- FOOTER -->
   <div class="no-print" style="text-align:center;padding:18px 0 10px;font-size:.72em;color:#aaa;">
-    Simulateur Salaires CCNP (IDCC 3097) v2 — Soldats Films / 1618 Films — 2026<br>
-    Grille SNTPCT Art. 34 Prod. cine. / Lot 1 : fix CS 67%, majo dim./ferie +100%, plafond Art.36, auto-detect feries
+    Simulateur Salaires CCNP (IDCC 3097) v3 — Soldats Films / 1618 Films — 2026<br>
+    Lot 2 : Art.35 H.anticipees, Art.39 6eme jour IDF, Art.46 indem. repas
   </div>
 </div>
 
@@ -680,15 +711,73 @@ function autoFillNight(id){
   if(!sv||!ev||!mnv)return;
   const nh=calcNightHours(sv.value,ev.value,parseInt(pv.value)||0,dv?dv.value:'');
   mnv.value=nh;
-  // Si jour special, sync majoJ = hEff
+  // Si jour special (date badge) OU 6eme jour, sync majoJ = hEff
   const badge=document.getElementById('badge-'+id);
-  if(badge&&badge.style.display!=='none'){
+  const sixjCb=document.getElementById('sixj-'+id);
+  const needSync=(badge&&badge.style.display!=='none')||(sixjCb&&sixjCb.checked);
+  if(needSync){
     const s2=parseTime(sv.value),eRaw2=parseTime(ev.value);
     const e2=(eRaw2<=s2)?eRaw2+24:eRaw2;
     const hEff=Math.max(e2-s2-(parseInt(pv.value)||0)/60,0);
     mjv.value=Math.round(hEff*4)/4;
   }
   recalc();
+}
+
+/**
+ * Art. 39 — 6eme jour consecutif IDF.
+ * Cochee : majoJ = hEff (majoration conventionnelle +100%, soumis plafond Art.36).
+ * Decochee : majoJ reset a 0 sauf si un badge date est aussi visible.
+ */
+function onSixiemeJour(id){
+  const cb=document.getElementById('sixj-'+id);
+  const badge6j=document.getElementById('badge6j-'+id);
+  const mjv=document.getElementById('majoJ-'+id);
+  const sv=document.getElementById('start-'+id);
+  const ev=document.getElementById('end-'+id);
+  const pv=document.getElementById('pause-'+id);
+  if(!cb||!badge6j)return;
+  if(cb.checked){
+    badge6j.style.display='inline-block';
+    if(sv&&ev&&mjv){
+      const s2=parseTime(sv.value),eRaw2=parseTime(ev.value);
+      const e2=(eRaw2<=s2)?eRaw2+24:eRaw2;
+      const hEff=Math.max(e2-s2-(parseInt(pv?.value)||0)/60,0);
+      mjv.value=Math.round(hEff*4)/4;
+    }
+  } else {
+    badge6j.style.display='none';
+    // Ne remet a 0 que si aucun badge date n'est visible
+    const dateBadge=document.getElementById('badge-'+id);
+    if(dateBadge&&dateBadge.style.display==='none'){
+      if(mjv)mjv.value=0;
+    }
+  }
+  recalc();
+}
+
+/**
+ * Art. 35 — Heures anticipees.
+ * Pour chaque paire de jours consecutifs, calcule le repos effectif.
+ * Si repos < 11h, retourne le nombre d'heures anticipees (= 11 - repos).
+ * Ces heures sont majorees a +100% LEGAL (exclues du plafond Art.36).
+ * Retourne un tableau d'heures anticipees par jour (index = position dans daysData).
+ */
+function computeHeuresAnticipees(daysData){
+  const ha=new Array(daysData.length).fill(0);
+  for(let i=0;i<daysData.length-1;i++){
+    const d1=daysData[i],d2=daysData[i+1];
+    if(!d1.start||!d1.end||!d2.start)continue;
+    const s1=parseTime(d1.start),eRaw1=parseTime(d1.end);
+    const e1Adj=(eRaw1<=s1)?eRaw1+24:eRaw1; // fin corrigee (peut depasser 24)
+    const s2=parseTime(d2.start);
+    // repos en heures entre fin du jour N et debut du jour N+1
+    const repos=s2+24-e1Adj;
+    if(repos>0&&repos<11){
+      ha[i+1]=Math.round((11-repos)*4)/4; // arrondi quart d'heure
+    }
+  }
+  return ha;
 }
 
 /**
@@ -722,20 +811,24 @@ function onDateChange(id){
   autoFillNight(id);
 }
 
-function addDay(start,end,pause,majoJ,majoN,dateVal){
+function addDay(start,end,pause,majoJ,majoN,dateVal,sixiemeJour){
   dayCount++;const id=dayCount;
   const div=document.createElement('div');
   div.className='day-row';div.id='day-'+id;
   const autoN=(majoN!==undefined&&majoN!==null)?majoN:calcNightHours(start||'08:00',end||'19:00',(pause!==undefined&&pause!==null)?pause:60,'');
+  const sixChecked=sixiemeJour?'checked':'';
+  const sixBadgeDisplay=sixiemeJour?'inline-block':'none';
   div.innerHTML=`
     <div>
       <input type="date" id="date-${id}" value="${dateVal||''}" onchange="onDateChange(${id})"/>
       <span id="badge-${id}" class="day-badge" style="display:none;"></span>
+      <label class="sixj-lbl"><input type="checkbox" id="sixj-${id}" onchange="onSixiemeJour(${id})" ${sixChecked}/> 6e j. IDF</label>
+      <span id="badge6j-${id}" class="day-badge day-badge-6j" style="display:${sixBadgeDisplay};">&#128309; 6e jour</span>
     </div>
     <div><input type="time" id="start-${id}" value="${start||'08:00'}" onchange="autoFillNight(${id})"/></div>
     <div><input type="number" id="pause-${id}" value="${pause!==undefined&&pause!==null?pause:60}" min="0" style="width:55px" onchange="autoFillNight(${id})"/></div>
     <div><input type="time" id="end-${id}" value="${end||'19:00'}" onchange="autoFillNight(${id})"/></div>
-    <div><input type="number" id="majoJ-${id}" value="${majoJ||0}" min="0" step="0.25" style="width:55px" onchange="recalc()" title="Heures majorees dim./ferie (+100%)"/></div>
+    <div><input type="number" id="majoJ-${id}" value="${majoJ||0}" min="0" step="0.25" style="width:55px" onchange="recalc()" title="Heures majorees dim./ferie/6ej (+100%)"/></div>
     <div><input type="number" id="majoN-${id}" value="${autoN}" min="0" step="0.25" style="width:55px;background:#fffbf0" onchange="recalc()" title="Heures de nuit (+50%/+100%)"/></div>
     <div><button class="btn-del" onclick="removeDay(${id})">X</button></div>`;
   document.getElementById('days-container').appendChild(div);
@@ -756,13 +849,15 @@ function getDaysData(){
     const sv=document.getElementById('start-'+id),ev=document.getElementById('end-'+id);
     const pv=document.getElementById('pause-'+id),dv=document.getElementById('date-'+id);
     const mjv=document.getElementById('majoJ-'+id),mnv=document.getElementById('majoN-'+id);
+    const sixjEl=document.getElementById('sixj-'+id);
     if(!sv||!ev)continue;
     r.push({
       date:dv?.value||'',
       start:sv.value,end:ev.value,
       pause:parseInt(pv.value)||0,
       majoJ:parseFloat(mjv.value)||0,
-      majoN:parseFloat(mnv.value)||0
+      majoN:parseFloat(mnv.value)||0,
+      sixiemeJour:sixjEl?sixjEl.checked:false
     });
   }
   return r;
@@ -818,16 +913,25 @@ function recalc(){
   const csRate=parseFloat(document.getElementById('cs-rate').value)||0;
   const tbody=document.getElementById('result-body');
   tbody.innerHTML='';
-  let T={hEff:0,base:0,s100:0,mj:0,mn:0,total:0,plafonne:false},nbJ=0;
+  let T={hEff:0,base:0,s100:0,mj:0,mn:0,ha:0,total:0,plafonne:false},nbJ=0;
 
-  for(const d of getDaysData()){
+  const daysData=getDaysData();
+  const haByDay=computeHeuresAnticipees(daysData);
+
+  for(let di=0;di<daysData.length;di++){
+    const d=daysData[di];
     const r=calcDay(d,tauxH);nbJ++;
+    const haH=haByDay[di]; // heures anticipees (legal, hors plafond)
+    const haMnt=haH*tauxH; // montant +100% legal
+    const totalJour=r.total+haMnt;
+
     const dl=d.date
       ?new Date(d.date+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit'})
       :'Jour '+nbJ;
     // Badge type jour dans la colonne "Jour"
     const typeInfo=getDayTypeInfo(d.date);
     const typTag=typeInfo?` <small style="color:${typeInfo.cls==='dimanche'?'#c07000':'#c0392b'}">${typeInfo.ferieName}</small>`:'';
+    const sixTag=d.sixiemeJour?' <small style="color:#1a5276">6e j.</small>':'';
     // Detail majo nuit
     let mnDetail='-';
     if(r.mnh>0){
@@ -839,22 +943,29 @@ function recalc(){
     // Majo jour detail
     let mjDetail='-';
     if(r.mjh>0){
-      const lbl=r.isPremierMai?'légal':'conv.';
+      const lbl=r.isPremierMai?'legal':'conv.';
       mjDetail=fmt(r.mj)+` <small>(${fmtH(r.mjh)}×100% ${lbl})</small>`;
     }
-    const plafTag=r.plafonne?' <small style="color:#e74c3c" title="Plafond Art.36 atteint">⚡plaf.</small>':'';
+    // Heures anticipees detail (Art. 35)
+    let haDetail='-';
+    if(haH>0){
+      haDetail=`<span class="ha-warn" title="Art.35 : repos insuff. — ${fmtH(11-haH)} constate < 11h requis">&#9888; ${fmt(haMnt)} <small>(${fmtH(haH)}×100% legal)</small></span>`;
+    }
+    const plafTag=r.plafonne?' <small style="color:#e74c3c" title="Plafond Art.36 atteint">&#9889;plaf.</small>':'';
     const premierMaiTag=r.isPremierMai?' <small style="color:#7d3c98">1er mai</small>':'';
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${dl}${typTag}</td>
+    tr.innerHTML=`<td>${dl}${typTag}${sixTag}</td>
       <td>${d.start}–${d.end} (${d.pause}')</td>
       <td>${fmtH(r.hEff)}</td>
       <td>${fmt(r.base)}</td>
       <td>${r.s100h>0?fmt(r.s100)+' <small>('+fmtH(r.s100h)+')</small>':'-'}</td>
       <td>${mjDetail}</td>
       <td>${mnDetail}</td>
-      <td style="font-weight:700">${fmt(r.total)}${plafTag}${premierMaiTag}</td>`;
+      <td>${haDetail}</td>
+      <td style="font-weight:700">${fmt(totalJour)}${plafTag}${premierMaiTag}</td>`;
     tbody.appendChild(tr);
-    T.hEff+=r.hEff;T.base+=r.base;T.s100+=r.s100;T.mj+=r.mj;T.mn+=(r.mn50+r.mn100);T.total+=r.total;
+    T.hEff+=r.hEff;T.base+=r.base;T.s100+=r.s100;T.mj+=r.mj;T.mn+=(r.mn50+r.mn100);
+    T.ha+=haMnt;T.total+=totalJour;
     if(r.plafonne)T.plafonne=true;
   }
   if(nbJ>0){
@@ -864,17 +975,34 @@ function recalc(){
       <td>${T.s100>0?fmt(T.s100):'-'}</td>
       <td>${T.mj>0?fmt(T.mj):'-'}</td>
       <td>${T.mn>0?fmt(T.mn):'-'}</td>
+      <td>${T.ha>0?'<span class="ha-warn">'+fmt(T.ha)+'</span>':'-'}</td>
       <td>${fmt(T.total)}</td>`;
     tbody.appendChild(tr);
   }
+
+  // Indemnites repas (Art. 46)
+  const nbRepas=parseInt(document.getElementById('nb-repas')?.value)||0;
+  const nbCC=parseInt(document.getElementById('nb-cc')?.value)||0;
+  const totalIndem=nbRepas*20.07+nbCC*8.95;
+  const tiEl=document.getElementById('total-indem');
+  if(tiEl)tiEl.value=fmtE(totalIndem);
+
   const cs=T.total*csRate,cout=T.total+cs;
+  const totalGeneral=cout+totalIndem;
   document.getElementById('r-brut').textContent=fmtE(T.total);
   document.getElementById('r-cs').textContent=fmtE(cs)+' (×'+fmt(csRate)+')';
   document.getElementById('r-cout').textContent=fmtE(cout);
   document.getElementById('r-jours').textContent=nbJ;
-  let fHtml=`${fmt(T.base)} (base) + ${fmt(T.s100)} (supp +100%) + ${fmt(T.mj)} (majo dim./ferie +100%) + ${fmt(T.mn)} (majo nuit) = <b>${fmtE(T.total)}</b>`;
-  if(T.plafonne)fHtml+=' <span style="color:#e74c3c">(plafond Art.36 atteint — majorations conventionnelles limitees a 100% de la base)</span>';
+
+  let fHtml=`${fmt(T.base)} (base) + ${fmt(T.s100)} (supp +100%) + ${fmt(T.mj)} (majo dim./ferie +100%) + ${fmt(T.mn)} (majo nuit)`;
+  if(T.ha>0)fHtml+=` + <span class="ha-warn">${fmt(T.ha)} (Art.35 H.anticipees +100%)</span>`;
+  fHtml+=` = <b>${fmtE(T.total)}</b>`;
+  if(T.plafonne)fHtml+=' <span style="color:#e74c3c">(plafond Art.36 — majorations conv. limitees a 100% de la base)</span>';
   fHtml+=`<br>Cout employeur = ${fmt(T.total)} × (1 + ${fmt(csRate)}) = <b>${fmtE(cout)}</b>`;
+  if(totalIndem>0){
+    fHtml+=`<br>Indemnites repas = ${nbRepas}×20,07 + ${nbCC}×8,95 = <b>${fmtE(totalIndem)}</b> (non soumis CS)`;
+    fHtml+=`<br><b style="color:#0f3460">Total general = ${fmtE(cout)} + ${fmtE(totalIndem)} = ${fmtE(totalGeneral)}</b>`;
+  }
   document.getElementById('formula-text').innerHTML=fHtml;
 }
 
@@ -891,10 +1019,12 @@ function saveFiche(){
     csRate:document.getElementById('cs-rate').value,
     rateSource:document.getElementById('rate-source').value,
     days:getDaysData(),
+    nbRepas:parseInt(document.getElementById('nb-repas')?.value)||0,
+    nbCC:parseInt(document.getElementById('nb-cc')?.value)||0,
     totalBrut:document.getElementById('r-brut').textContent,
     totalCout:document.getElementById('r-cout').textContent,
     savedAt:new Date().toLocaleString('fr-FR'),
-    version:2
+    version:3
   };
   const idx=fiches.findIndex(f=>f.name.toLowerCase()===name.toLowerCase());
   if(idx>=0){if(confirm('Fiche "'+name+'" existante. Remplacer ?'))fiches[idx]=fiche;else return;}
@@ -912,8 +1042,12 @@ function loadFiche(id){
   if(f.metierIndex!==undefined)document.getElementById('metier-select').selectedIndex=f.metierIndex;
   document.getElementById('days-container').innerHTML='';dayCount=0;
   for(const d of f.days){
-    addDay(d.start,d.end,d.pause,d.majoJ,d.majoN,d.date||'');
+    addDay(d.start,d.end,d.pause,d.majoJ,d.majoN,d.date||'',d.sixiemeJour||false);
   }
+  const nrEl=document.getElementById('nb-repas');
+  const ncEl=document.getElementById('nb-cc');
+  if(nrEl)nrEl.value=f.nbRepas||0;
+  if(ncEl)ncEl.value=f.nbCC||0;
   updateBadge();recalc();
 }
 
@@ -944,8 +1078,12 @@ function exportPDF(){
   const metier=getMetierLabel();
   const dm=document.getElementById('daily-min').value;
   const src=document.getElementById('rate-source');
-  document.getElementById('print-subtitle').textContent=
-    name+' / '+metier+' / '+fmt(parseFloat(dm))+' EUR/8h / Grille '+grilleLabel();
+  const nbRepasPrint=parseInt(document.getElementById('nb-repas')?.value)||0;
+  const nbCCPrint=parseInt(document.getElementById('nb-cc')?.value)||0;
+  const totalIndemPrint=nbRepasPrint*20.07+nbCCPrint*8.95;
+  let subtitle=name+' / '+metier+' / '+fmt(parseFloat(dm))+' EUR/8h / Grille '+grilleLabel();
+  if(totalIndemPrint>0)subtitle+=' / Indem. repas : '+fmtE(totalIndemPrint);
+  document.getElementById('print-subtitle').textContent=subtitle;
   document.getElementById('metier-print').textContent=metier;
   document.getElementById('metier-print').style.display='block';
   document.getElementById('grille-print').textContent='Grille : '+grilleLabel();
