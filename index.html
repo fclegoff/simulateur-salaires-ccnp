@@ -279,6 +279,9 @@
         <input type="text" id="total-indem" readonly style="background:#f0f4ff;font-weight:700;"/>
       </div>
     </div>
+    <div id="jc-warn" style="display:none;background:#fff3cd;color:#856404;border:1px solid #ffc107;border-radius:6px;padding:8px 12px;font-size:.82em;font-weight:600;margin-top:8px;">
+      &#128992; <span id="jc-warn-txt"></span> — pensez a incrementer le compteur ci-dessus.
+    </div>
     <p class="info no-print">Non soumis aux charges sociales. Grille SNTPCT 2025 : repas 20,07 EUR / casse-croute 8,95 EUR (accord mars 2024 : 18,56 / 7,54 EUR).</p>
   </div>
 
@@ -406,6 +409,11 @@
         <div class="rules-article">
           <h3><span class="art-num">Art. 35</span> Heures anticipees</h3>
           <p>Repos minimum entre deux journees : <b>11 heures</b>. Heures empiétant sur ce repos : <b>+100 %</b> (independamment des autres majorations).</p>
+        </div>
+
+        <div class="rules-article">
+          <h3><span class="art-num">C. trav.</span> Journee continue</h3>
+          <p>Pause obligatoire de <b>20 min apres 6h</b> de travail consecutif (Art. L3121-16). Si pause &lt;&nbsp;30&nbsp;min et duree &gt;&nbsp;6h : journee continue — la pause compte comme temps travaille + <b>casse-croute du</b> (8,95 EUR).</p>
         </div>
 
         <div class="rules-article">
@@ -978,9 +986,14 @@ function getDaysData(){
 // ─── CALC ─────────────────────────────────────────────────────────────────────
 
 function calcDay(d, tauxH){
-  const s=parseTime(d.start), eRaw=parseTime(d.end), pause=d.pause/60;
+  const s=parseTime(d.start), eRaw=parseTime(d.end);
   const e=(eRaw<=s)?eRaw+24:eRaw;
-  const hEff=Math.max(e-s-pause,0);
+  const durationH=e-s; // duree brute (avant deduction pause)
+  // Journee continue : pause < 30 min ET duree > 6h
+  // => la pause compte comme temps travaille (Code du travail Art. L3121-16)
+  const isJC = d.pause < 30 && durationH > 6;
+  const pause = isJC ? 0 : d.pause/60;
+  const hEff=Math.max(durationH-pause,0);
   const base=hEff*tauxH;
 
   // Heures supplementaires au-dela de 8h : +100% (Art. 34 films pub.)
@@ -1013,6 +1026,7 @@ function calcDay(d, tauxH){
     mjh:d.majoJ, mj,
     mnh:d.majoN, mn50h, mn50, mn100h, mn100, mn,
     majoConv, plafondConv, plafonne, isPremierMai,
+    isJC,
     total
   };
 }
@@ -1025,7 +1039,7 @@ function recalc(){
   const csRate=parseFloat(document.getElementById('cs-rate').value)||0;
   const tbody=document.getElementById('result-body');
   tbody.innerHTML='';
-  let T={hEff:0,base:0,s100:0,mj:0,mn:0,ha:0,total:0,plafonne:false},nbJ=0;
+  let T={hEff:0,base:0,s100:0,mj:0,mn:0,ha:0,total:0,plafonne:false,nbJC:0},nbJ=0;
 
   const daysData=getDaysData();
   const haByDay=computeHeuresAnticipees(daysData);
@@ -1044,6 +1058,7 @@ function recalc(){
     const typeInfo=getDayTypeInfo(d.date);
     const typTag=typeInfo?` <small style="color:${typeInfo.cls==='dimanche'?'#c07000':'#c0392b'}">${typeInfo.ferieName}</small>`:'';
     const sixTag=d.sixiemeJour?' <small style="color:#1a5276">6e j.</small>':'';
+    const jcTag=r.isJC?` <span style="background:#fff3cd;color:#856404;font-size:.68em;font-weight:700;padding:1px 5px;border-radius:3px;border:1px solid #ffc107" title="Journee continue : pause < 30 min apres 6h — pause comptee comme temps travaille + casse-croute du">&#128992; J.cont.</span>`:'';
     // Detail majo nuit
     let mnDetail='-';
     if(r.mnh>0){
@@ -1066,8 +1081,8 @@ function recalc(){
     const plafTag=r.plafonne?' <small style="color:#e74c3c" title="Plafond Art.36 atteint">&#9889;plaf.</small>':'';
     const premierMaiTag=r.isPremierMai?' <small style="color:#7d3c98">1er mai</small>':'';
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${dl}${typTag}${sixTag}</td>
-      <td>${d.start}–${d.end} (${d.pause}')</td>
+    tr.innerHTML=`<td>${dl}${typTag}${sixTag}${jcTag}</td>
+      <td>${d.start}–${d.end} (${d.pause}')${r.isJC?' <small style="color:#856404">J.cont.</small>':''}</td>
       <td>${fmtH(r.hEff)}</td>
       <td>${fmt(r.base)}</td>
       <td>${r.s100h>0?fmt(r.s100)+' <small>('+fmtH(r.s100h)+')</small>':'-'}</td>
@@ -1079,6 +1094,7 @@ function recalc(){
     T.hEff+=r.hEff;T.base+=r.base;T.s100+=r.s100;T.mj+=r.mj;T.mn+=(r.mn50+r.mn100);
     T.ha+=haMnt;T.total+=totalJour;
     if(r.plafonne)T.plafonne=true;
+    if(r.isJC)T.nbJC++;
   }
   if(nbJ>0){
     const tr=document.createElement('tr');tr.className='total-row';
@@ -1092,7 +1108,11 @@ function recalc(){
     tbody.appendChild(tr);
   }
 
-  // Indemnites repas (Art. 46)
+  // Indemnites repas (Art. 46) — avertissement journee continue
+  const jcWarnEl=document.getElementById('jc-warn');
+  if(jcWarnEl)jcWarnEl.style.display=T.nbJC>0?'block':'none';
+  const jcWarnTxtEl=document.getElementById('jc-warn-txt');
+  if(jcWarnTxtEl)jcWarnTxtEl.textContent=T.nbJC+' journee'+(T.nbJC>1?'s':'')+' continue'+(T.nbJC>1?'s':'')+' detectee'+(T.nbJC>1?'s':'')+' — '+T.nbJC+' casse-croute'+(T.nbJC>1?'s':'')+' du (×8,95 EUR)';
   const nbRepas=parseInt(document.getElementById('nb-repas')?.value)||0;
   const nbCC=parseInt(document.getElementById('nb-cc')?.value)||0;
   const totalIndem=nbRepas*20.07+nbCC*8.95;
@@ -1106,7 +1126,9 @@ function recalc(){
   document.getElementById('r-cout').textContent=fmtE(cout);
   document.getElementById('r-jours').textContent=nbJ;
 
-  let fHtml=`${fmt(T.base)} (base) + ${fmt(T.s100)} (supp +100%) + ${fmt(T.mj)} (majo dim./ferie +100%) + ${fmt(T.mn)} (majo nuit)`;
+  let fHtml='';
+  if(T.nbJC>0)fHtml+=`<span style="background:#fff3cd;color:#856404;font-size:.82em;padding:2px 7px;border-radius:4px;font-weight:600;display:inline-block;margin-bottom:6px;">&#128992; ${T.nbJC} journee${T.nbJC>1?'s':''} continue${T.nbJC>1?'s':''} — pause comptee comme temps travaille</span><br>`;
+  fHtml+=`${fmt(T.base)} (base) + ${fmt(T.s100)} (supp +100%) + ${fmt(T.mj)} (majo dim./ferie +100%) + ${fmt(T.mn)} (majo nuit)`;
   if(T.ha>0)fHtml+=` + <span class="ha-warn">${fmt(T.ha)} (Art.35 H.anticipees +100%)</span>`;
   fHtml+=` = <b>${fmtE(T.total)}</b>`;
   if(T.plafonne)fHtml+=' <span style="color:#e74c3c">(plafond Art.36 — majorations conv. limitees a 100% de la base)</span>';
