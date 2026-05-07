@@ -863,12 +863,30 @@ function computeHeuresAnticipees(daysData){
     const d1=daysData[i],d2=daysData[i+1];
     if(!d1.start||!d1.end||!d2.start)continue;
     const s1=parseTime(d1.start),eRaw1=parseTime(d1.end);
-    const e1Adj=(eRaw1<=s1)?eRaw1+24:eRaw1; // fin corrigee (peut depasser 24)
+    const e1Adj=(eRaw1<=s1)?eRaw1+24:eRaw1; // fin reelle (peut depasser 24 si nuit)
     const s2=parseTime(d2.start);
-    // repos en heures entre fin du jour N et debut du jour N+1
-    const repos=s2+24-e1Adj;
+
+    let repos;
+    if(d1.date&&d2.date){
+      // Les deux journees ont des dates : calcul exact en tenant compte de l'ecart calendaire
+      const dd1=new Date(d1.date+'T00:00:00'),dd2=new Date(d2.date+'T00:00:00');
+      const daysDiff=Math.round((dd2-dd1)/(1000*60*60*24));
+      if(daysDiff<0)continue; // journees dans le mauvais ordre, on ignore
+      if(daysDiff===0){
+        // Meme date : repos entre fin et debut dans la meme journee (cas atypique)
+        repos=s2-e1Adj;
+        if(repos<0)repos+=24;
+      } else {
+        // repos = debut J2 + (ecart jours x 24) - fin J1
+        repos=s2+daysDiff*24-e1Adj;
+      }
+    } else {
+      // Pas de dates : on suppose jours consecutifs (comportement par defaut)
+      repos=s2+24-e1Adj;
+    }
+
     if(repos>0&&repos<11){
-      ha[i+1]=Math.round((11-repos)*4)/4; // arrondi quart d'heure
+      ha[i+1]=Math.round((11-repos)*4)/4;
     }
   }
   return ha;
