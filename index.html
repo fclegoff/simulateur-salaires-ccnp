@@ -65,6 +65,17 @@
   .day-badge.ferie{background:#fff0f0;color:#c0392b;border:1px solid #f5c6c6}
   .day-badge.dimanche{background:#fff7e0;color:#c07000;border:1px solid #f9dfa0}
   .day-badge.premier_mai{background:#f5f0ff;color:#7d3c98;border:1px solid #d7b9f5}
+  /* ─── Accord salarial ──────────────────────────────────────────── */
+  .accord-banner{background:#d4edda;color:#155724;border:1px solid #c3e6cb;border-radius:6px;padding:10px 14px;font-size:.85em;font-weight:600;margin:10px 0}
+  .share-load-banner{background:#cce5ff;color:#004085;border:1px solid #b8daff;border-radius:6px;padding:10px 14px;font-size:.85em;font-weight:600;margin-bottom:10px}
+  .sign-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px}
+  .sign-block{background:#f8f9fa;border-radius:8px;padding:14px;border:1px solid #e3e8ef}
+  .sign-block h3{font-size:.8em;color:#0f3460;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+  .sign-status{display:inline-block;font-size:.72em;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px}
+  .sign-status.ok{background:#d4edda;color:#155724}
+  .sign-status.pending{background:#fff3cd;color:#856404}
+  .accord-print-block{display:none}
+  @media(max-width:700px){.sign-cols{grid-template-columns:1fr}}
   /* ─── Print ─────────────────────────────────────────────────────── */
   @media print{
     body{background:#fff;padding:0;font-size:10pt}
@@ -77,6 +88,8 @@
     .total-row td{background:#e8eef5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .formula{border-left:3px solid #0f3460;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7.5pt}
     #print-header{display:block!important}
+    .accord-print-block{display:block!important;page-break-before:avoid}
+    .accord-print-block .sign-line{border-top:1px solid #999;height:40px;margin-top:5px}
     /* Règles : toujours imprimées, taille réduite */
     .rules-card{display:block!important;page-break-before:always}
     .rules-card h2{font-size:.9em}
@@ -110,6 +123,10 @@
 </head>
 <body>
 <div class="container">
+
+  <div id="share-load-banner" class="share-load-banner no-print" style="display:none;">
+    &#128279; Fiche partag&eacute;e — V&eacute;rifiez les donn&eacute;es ci-dessous, puis renseignez votre signature dans la carte &laquo;&nbsp;Accord salarial&nbsp;&raquo; en bas de page.
+  </div>
 
   <div id="print-header">
     <h1>Fiche Salaire Technicien</h1>
@@ -273,6 +290,83 @@
       <button class="btn btn-pdf" onclick="exportPDF()">Exporter en PDF (impression)</button>
       <button class="btn" onclick="exportAllJSON()" style="background:#34495e">Exporter fiches (JSON)</button>
       <label class="btn" style="background:#34495e;cursor:pointer">Importer fiches (JSON)<input type="file" accept=".json" style="display:none" onchange="importJSON(event)"></label>
+    </div>
+  </div>
+
+  <!-- ─── ACCORD SALARIAL ──────────────────────────────────────────────────── -->
+  <div class="card" id="accord-card">
+    <h2>Accord salarial &#129309;</h2>
+    <p class="info no-print" style="margin-bottom:12px;">
+      Partagez la fiche avec le technicien via un lien. Il v&eacute;rifie les donn&eacute;es et signe.
+      Quand les deux noms sont renseign&eacute;s, exportez le PDF d&apos;accord.
+    </p>
+
+    <div class="sign-cols">
+      <div class="sign-block">
+        <h3>Production <span id="status-prod" class="sign-status pending">en attente</span></h3>
+        <div style="margin-bottom:8px">
+          <label>Signataire production</label>
+          <input type="text" id="sign-prod" placeholder="Nom Prenom, titre" oninput="checkAccord()"/>
+        </div>
+        <div>
+          <label>Email production (optionnel)</label>
+          <input type="email" id="email-prod" placeholder="prod@studio.fr"/>
+        </div>
+      </div>
+      <div class="sign-block">
+        <h3>Technicien <span id="status-tech" class="sign-status pending">en attente</span></h3>
+        <div style="margin-bottom:8px">
+          <label>Signataire technicien</label>
+          <input type="text" id="sign-tech" placeholder="Nom Prenom" oninput="checkAccord()"/>
+        </div>
+        <div>
+          <label>Email technicien (optionnel)</label>
+          <input type="email" id="email-tech" placeholder="tech@email.fr"/>
+        </div>
+      </div>
+    </div>
+
+    <div id="accord-banner" class="accord-banner" style="display:none;">
+      &#9989; Accord &eacute;tabli — les deux parties ont renseign&eacute; leur signature. Exportez le PDF ci-dessous.
+    </div>
+
+    <div class="actions-bar no-print" style="margin-top:12px;">
+      <button class="btn" style="background:#27ae60" onclick="copyShareURL()">&#128203; Copier le lien de partage</button>
+      <button class="btn" style="background:#2980b9" onclick="sendByEmail()">&#128231; Envoyer par email</button>
+      <button class="btn btn-pdf" onclick="exportAccordPDF()" id="btn-accord-pdf">&#128196; Exporter accord PDF</button>
+    </div>
+    <p class="info no-print" style="margin-top:8px;">
+      Le lien encode la fiche compl&egrave;te. Le destinataire peut v&eacute;rifier les donn&eacute;es et ajouter sa signature sans cr&eacute;er de compte.
+    </p>
+
+    <!-- Bloc imprime dans le PDF accord -->
+    <div class="accord-print-block" id="accord-print-block">
+      <div style="border-top:2px solid #0f3460;padding-top:14px;margin-top:14px;">
+        <h3 style="font-size:.88em;color:#0f3460;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px;">Accord salarial — Lu et approuv&eacute;</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+          <div>
+            <p style="font-weight:700;font-size:.85em;margin-bottom:6px;">Pour la production</p>
+            <p style="font-size:.82em;">Signataire : <strong id="accord-sign-prod"></strong></p>
+            <p style="font-size:.82em;" id="accord-email-prod-row">Email : <span id="accord-email-prod"></span></p>
+            <p style="font-size:.82em;">Date : <span id="accord-date-prod"></span></p>
+            <div class="sign-line"></div>
+            <p style="font-size:.72em;color:#888;margin-top:2px;">Signature</p>
+          </div>
+          <div>
+            <p style="font-weight:700;font-size:.85em;margin-bottom:6px;">Pour le technicien</p>
+            <p style="font-size:.82em;">Signataire : <strong id="accord-sign-tech"></strong></p>
+            <p style="font-size:.82em;" id="accord-email-tech-row">Email : <span id="accord-email-tech"></span></p>
+            <p style="font-size:.82em;">Date : <span id="accord-date-tech"></span></p>
+            <div class="sign-line"></div>
+            <p style="font-size:.72em;color:#888;margin-top:2px;">Signature</p>
+          </div>
+        </div>
+        <p style="font-size:.72em;color:#555;margin-top:14px;font-style:italic;border-top:1px solid #eee;padding-top:8px;">
+          Les parties reconnaissent avoir v&eacute;rifi&eacute; les conditions salariales ci-dessus et les approuvent
+          conform&eacute;ment &agrave; la Convention Collective Nationale de la Production Cin&eacute;matographique (CCNP IDCC 3097),
+          &agrave; l&apos;accord SNTPCT Art.&nbsp;34 Films publicitaires et &agrave; ses avenants en vigueur.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -1149,14 +1243,152 @@ function importJSON(evt){
   reader.readAsText(file);evt.target.value='';
 }
 
+// ─── ACCORD / PARTAGE ────────────────────────────────────────────────────────
+
+function getAccordData(){
+  return{
+    techName:document.getElementById('tech-name').value||'',
+    metierIndex:document.getElementById('metier-select').selectedIndex,
+    grille:currentGrille,
+    dailyMin:parseFloat(document.getElementById('daily-min').value)||0,
+    csRate:document.getElementById('cs-rate').value,
+    rateSource:document.getElementById('rate-source').value,
+    days:getDaysData(),
+    nbRepas:parseInt(document.getElementById('nb-repas')?.value)||0,
+    nbCC:parseInt(document.getElementById('nb-cc')?.value)||0,
+    signProd:document.getElementById('sign-prod')?.value||'',
+    emailProd:document.getElementById('email-prod')?.value||'',
+    emailTech:document.getElementById('email-tech')?.value||'',
+    sharedAt:new Date().toISOString(),
+    v:3
+  };
+}
+
+function buildShareURL(){
+  const data=getAccordData();
+  const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  return window.location.origin+window.location.pathname+'#fiche='+encoded;
+}
+
+function copyShareURL(){
+  const url=buildShareURL();
+  const fallback=()=>{const ta=document.createElement('textarea');ta.value=url;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();alert('Lien copie dans le presse-papier !');};
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(url).then(()=>alert('Lien copie !\nPartagez-le par email, SMS ou WhatsApp avec le technicien.')).catch(fallback);
+  } else fallback();
+}
+
+function sendByEmail(){
+  const name=document.getElementById('tech-name').value||'Technicien';
+  const metier=getMetierLabel();
+  const brut=document.getElementById('r-brut').textContent;
+  const cout=document.getElementById('r-cout').textContent;
+  const nbJ=document.getElementById('r-jours').textContent;
+  const emailTech=document.getElementById('email-tech')?.value||'';
+  const url=buildShareURL();
+  const subject=encodeURIComponent('Accord salarial — '+name+' / '+metier);
+  const body=encodeURIComponent(
+    'Bonjour '+name+',\n\n'+
+    'Veuillez trouver ci-dessous votre fiche salaire etablie selon la Convention Collective\n'+
+    'CCNP IDCC 3097, accord SNTPCT Art. 34 Films publicitaires.\n\n'+
+    'Metier : '+metier+'\n'+
+    'Nombre de jours : '+nbJ+'\n'+
+    'Total brut : '+brut+'\n'+
+    'Cout employeur : '+cout+'\n\n'+
+    'Cliquez sur ce lien pour verifier les informations et apposer votre signature :\n'+
+    url+'\n\n'+
+    'Une fois valide, vous pourrez exporter le PDF d\'accord.\n\n'+
+    'Cordialement'
+  );
+  window.open('mailto:'+emailTech+'?subject='+subject+'&body='+body);
+}
+
+function loadFromHash(){
+  const hash=window.location.hash;
+  if(!hash.startsWith('#fiche='))return;
+  try{
+    const encoded=hash.slice(7);
+    const data=JSON.parse(decodeURIComponent(escape(atob(encoded))));
+    if(data.grille&&data.grille!==currentGrille)setGrille(data.grille);
+    if(data.techName)document.getElementById('tech-name').value=data.techName;
+    if(data.dailyMin)document.getElementById('daily-min').value=data.dailyMin;
+    if(data.csRate)document.getElementById('cs-rate').value=data.csRate;
+    if(data.rateSource)document.getElementById('rate-source').value=data.rateSource||'sntpct';
+    if(data.metierIndex!==undefined)document.getElementById('metier-select').selectedIndex=data.metierIndex;
+    document.getElementById('days-container').innerHTML='';dayCount=0;
+    for(const d of(data.days||[])){
+      addDay(d.start,d.end,d.pause,d.majoJ,d.majoN,d.date||'',d.sixiemeJour||false);
+    }
+    const nrEl=document.getElementById('nb-repas'),ncEl=document.getElementById('nb-cc');
+    if(nrEl)nrEl.value=data.nbRepas||0;
+    if(ncEl)ncEl.value=data.nbCC||0;
+    const spEl=document.getElementById('sign-prod'),epEl=document.getElementById('email-prod');
+    const etEl=document.getElementById('email-tech'),stEl=document.getElementById('sign-tech');
+    if(spEl&&data.signProd)spEl.value=data.signProd;
+    if(epEl&&data.emailProd)epEl.value=data.emailProd;
+    if(etEl&&data.emailTech)etEl.value=data.emailTech;
+    // Technicien : pre-rempli avec le nom mais laisse vide si pas de signature tech deja encodee
+    if(stEl&&!stEl.value&&data.techName)stEl.placeholder=data.techName;
+    updateBadge();recalc();checkAccord();
+    const banner=document.getElementById('share-load-banner');
+    if(banner)banner.style.display='block';
+    // Scroll vers l'accord card apres chargement
+    setTimeout(()=>document.getElementById('accord-card')?.scrollIntoView({behavior:'smooth',block:'center'}),600);
+  }catch(e){console.error('Erreur chargement fiche partagee:',e);}
+}
+
+function checkAccord(){
+  const prod=(document.getElementById('sign-prod')?.value||'').trim();
+  const tech=(document.getElementById('sign-tech')?.value||'').trim();
+  const spStatus=document.getElementById('status-prod');
+  const stStatus=document.getElementById('status-tech');
+  const banner=document.getElementById('accord-banner');
+  if(spStatus){spStatus.className='sign-status '+(prod.length>1?'ok':'pending');spStatus.textContent=prod.length>1?'signe':'en attente';}
+  if(stStatus){stStatus.className='sign-status '+(tech.length>1?'ok':'pending');stStatus.textContent=tech.length>1?'signe':'en attente';}
+  if(banner)banner.style.display=(prod.length>1&&tech.length>1)?'block':'none';
+  // Sync placeholder sign-tech avec techName
+  const techName=document.getElementById('tech-name')?.value;
+  const stEl=document.getElementById('sign-tech');
+  if(stEl&&!stEl.value&&techName)stEl.placeholder=techName;
+}
+
+function exportAccordPDF(){
+  const signProd=(document.getElementById('sign-prod')?.value||'').trim()||'_______________';
+  const signTech=(document.getElementById('sign-tech')?.value||'').trim()||'_______________';
+  const emailProd=document.getElementById('email-prod')?.value||'';
+  const emailTech=document.getElementById('email-tech')?.value||'';
+  const today=new Date().toLocaleDateString('fr-FR');
+  // Remplir le bloc d'impression
+  document.getElementById('accord-sign-prod').textContent=signProd;
+  document.getElementById('accord-sign-tech').textContent=signTech;
+  document.getElementById('accord-email-prod').textContent=emailProd;
+  document.getElementById('accord-email-tech').textContent=emailTech;
+  document.getElementById('accord-date-prod').textContent=today;
+  document.getElementById('accord-date-tech').textContent=today;
+  document.getElementById('accord-email-prod-row').style.display=emailProd?'block':'none';
+  document.getElementById('accord-email-tech-row').style.display=emailTech?'block':'none';
+  document.getElementById('accord-print-block').style.display='block';
+  // Lancer le PDF standard
+  exportPDF();
+  // Nettoyer
+  document.getElementById('accord-print-block').style.display='none';
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 document.getElementById('daily-min').addEventListener('input',function(){updateBadge();recalc();});
 document.getElementById('cs-rate').addEventListener('change',recalc);
+// Sync sign-tech quand le nom du tech change
+document.getElementById('tech-name').addEventListener('input',checkAccord);
 
 buildMetierSelect();
-addDay('08:00','19:00',60,0,0,'');
-addDay('07:00','20:00',60,0,0,'');
+// Charge depuis hash ou affiche les journees par defaut
+if(window.location.hash.startsWith('#fiche=')){
+  loadFromHash();
+} else {
+  addDay('08:00','19:00',60,0,0,'');
+  addDay('07:00','20:00',60,0,0,'');
+}
 renderFiches();
 </script>
 </body>
