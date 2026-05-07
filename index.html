@@ -150,8 +150,8 @@
 
     <p class="grille-label no-print">Choisir la grille de reference SNTPCT :</p>
     <div class="grille-toggle no-print" id="grille-toggle">
-      <button id="btn-grille-a" onclick="setGrille('a')">Accord mars 2024</button>
-      <button id="btn-grille-b" class="active" onclick="setGrille('b')">Reevalue juil. 2025 / janv. 2026 (+8,95%)</button>
+      <button id="btn-grille-a" class="active" onclick="setGrille('a')">Accord mars 2024</button>
+      <button id="btn-grille-b" onclick="setGrille('b')">Reevalue juil. 2025 / janv. 2026 (+8,95%)</button>
     </div>
     <div id="grille-print" style="display:none;font-size:.85em;font-weight:600;color:#0f3460;margin-bottom:8px;"></div>
 
@@ -632,7 +632,7 @@ const SECTIONS_ORDER = [
   "IMAGE","SON","COSTUMES","MAQUILLAGE","COIFFURE","DECORATION","EFFETS SPECIAUX","MONTAGE","MIXAGE"
 ];
 
-let currentGrille = 'b';
+let currentGrille = 'a';
 let dayCount = 0;
 let fiches = [];
 
