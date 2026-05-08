@@ -135,7 +135,7 @@
 
   <div class="no-print">
     <h1>Simulateur Salaires Intermittents</h1>
-    <p class="sub">Convention CCNP Cinema-Publicite (IDCC 3097) / Art. 34 Films publicitaires / Contrat a la journee</p>
+    <p class="sub" id="app-sub">Convention CCNP Cinema-Publicite (IDCC 3097) / Art. 34 / Contrat a la journee</p>
   </div>
 
   <!-- FICHES ENREGISTREES -->
@@ -148,7 +148,13 @@
   <div class="card">
     <h2>Grille tarifaire et metier <span class="rate-badge" id="rate-badge">396,12 EUR/8h</span></h2>
 
-    <p class="grille-label no-print">Choisir la grille de reference SNTPCT :</p>
+    <p class="grille-label no-print">Type de production :</p>
+    <div class="grille-toggle no-print" id="type-toggle" style="margin-bottom:8px;">
+      <button id="btn-type-pub" class="active" onclick="setType('pub')">&#127916; Films publicitaires — Art. 34 (base 8h)</button>
+      <button id="btn-type-cine" onclick="setType('cine')">&#127916; Production cinematographique — Art. 34 (base 7h)</button>
+    </div>
+
+    <p class="grille-label no-print">Grille de reference SNTPCT :</p>
     <div class="grille-toggle no-print" id="grille-toggle">
       <button id="btn-grille-a" class="active" onclick="setGrille('a')">Accord mars 2024</button>
       <button id="btn-grille-b" onclick="setGrille('b')">Reevalue juil. 2025 / janv. 2026 (+8,95%)</button>
@@ -157,7 +163,7 @@
 
     <div class="grid2">
       <div>
-        <label>Metier (postes SNTPCT Art. 34 films pub.)</label>
+        <label id="metier-label-txt">Metier (postes SNTPCT Art. 34)</label>
         <select id="metier-select" class="metier-select no-print" onchange="onMetierChange()"></select>
         <div id="metier-print" style="display:none;font-weight:600;font-size:.9em;padding:4px 0;"></div>
       </div>
@@ -169,11 +175,11 @@
 
     <div class="grid4" style="margin-top:10px;">
       <div>
-        <label>Minimum journalier 8h (brut EUR)</label>
+        <label id="daily-min-label">Minimum journalier 8h (brut EUR)</label>
         <input type="number" id="daily-min" value="396.12" step="0.01" />
       </div>
       <div>
-        <label>Taux horaire brut (auto = min/8)</label>
+        <label id="hourly-rate-label">Taux horaire brut (auto = min/8h)</label>
         <input type="text" id="hourly-rate" readonly style="background:#f0f4ff;font-weight:700;" />
       </div>
       <div>
@@ -197,7 +203,8 @@
       </div>
     </div>
     <p class="src-info no-print">
-      Grille SNTPCT Art. 34 Prod. cine. et films pub. / Accord mars 2024 OU reevaluation +8,95% applicable au 1er juillet 2025 (= 1er janv. 2026, hausse 0% accordee par les producteurs).
+      Grille SNTPCT Art. 34 / Accord mars 2024 OU reevaluation +8,95% applicable au 1er juil. 2025 (= 1er janv. 2026).
+      Films pub. : base 8h, taux = hebdo &divide; 40 &times; 1,50. Production cine. (journee) : base 7h, taux = hebdo &divide; 40 &times; 1,25.
     </p>
   </div>
 
@@ -239,7 +246,7 @@
         <tr>
           <th>Jour</th><th>Horaires</th><th>H. eff.</th>
           <th>Base EUR<br><small>h x taux</small></th>
-          <th>Supp +100%<br><small>au-dela 8h</small></th>
+          <th id="th-supp-label">Supp +100%<br><small>au-dela 8h</small></th>
           <th>Majo dim./ferie<br><small>+100%</small></th>
           <th>Majo nuit<br><small>+50%/+100%</small></th>
           <th>H. antic.<br><small>Art.35 +100%</small></th>
@@ -253,12 +260,14 @@
   <!-- RECAP -->
   <div class="card">
     <h2>Recapitulatif</h2>
-    <div class="recap-grid">
+    <div class="recap-grid" style="grid-template-columns:repeat(5,1fr)">
       <div class="recap-box"><div class="val" id="r-brut">0</div><div class="lbl">Total brut (EUR)</div></div>
       <div class="recap-box"><div class="val" id="r-cs">0</div><div class="lbl">Charges sociales</div></div>
       <div class="recap-box"><div class="val" id="r-cout">0</div><div class="lbl">Cout employeur (EUR)</div></div>
       <div class="recap-box"><div class="val" id="r-jours">0</div><div class="lbl">Jours travailles</div></div>
+      <div class="recap-box" id="r-heures-box"><div class="val" id="r-heures">0h</div><div class="lbl" id="r-heures-lbl">H. effectives</div></div>
     </div>
+    <div id="art37-warn" style="display:none;margin-top:8px;background:#fff8f0;border-left:3px solid #e67e22;padding:7px 12px;border-radius:4px;font-size:.8em;"></div>
     <div id="usd-recap" style="display:none;margin-top:10px;background:#f0f7ff;border-radius:8px;padding:10px 14px;display:none;">
       <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
         <div>
@@ -382,7 +391,7 @@
         <p style="font-size:.72em;color:#555;margin-top:14px;font-style:italic;border-top:1px solid #eee;padding-top:8px;">
           Les parties reconnaissent avoir v&eacute;rifi&eacute; les conditions salariales ci-dessus et les approuvent
           conform&eacute;ment &agrave; la Convention Collective Nationale de la Production Cin&eacute;matographique (CCNP IDCC 3097),
-          &agrave; l&apos;accord SNTPCT Art.&nbsp;34 Films publicitaires et &agrave; ses avenants en vigueur.
+          &agrave; l&apos;accord SNTPCT Art.&nbsp;34 et &agrave; ses avenants en vigueur.
         </p>
       </div>
     </div>
@@ -390,7 +399,7 @@
 
   <!-- ─── REGLES DE CALCUL (imprimables) ──────────────────────────────────── -->
   <div class="card rules-card">
-    <h2>Regles de calcul — CCNP IDCC 3097 / Films publicitaires</h2>
+    <h2>Regles de calcul — CCNP IDCC 3097 / Films publicitaires &amp; Production cinematographique</h2>
     <div class="rules-grid">
 
       <!-- Colonne gauche -->
@@ -402,6 +411,16 @@
             <li>Duree minimale : <b>8 heures</b></li>
             <li>Heures supplementaires au-dela de 8h : <b>+100 %</b></li>
             <li>Au-dela de la 10eme heure (Art. 38) : +100 % supplementaires</li>
+          </ul>
+        </div>
+
+        <div class="rules-article">
+          <h3><span class="art-num">Art. 34</span> Salaires a la journee — Production cinematographique</h3>
+          <ul>
+            <li>Taux horaire = Salaire hebdo 39h &divide; 40, <b>majore de 25 %</b></li>
+            <li>Duree minimale : <b>7 heures</b></li>
+            <li>Heures supplementaires au-dela de 7h : <b>+100 %</b></li>
+            <li>Art. 37 — heures sup. hebdo : 36e&ndash;43e <b>+25 %</b>, 44e&ndash;48e <b>+50 %</b>, au-dela <b>+75 %</b></li>
           </ul>
         </div>
 
@@ -476,15 +495,16 @@
         <div class="rules-article">
           <h3>Formule recapitulative</h3>
           <p style="font-family:'Courier New',monospace;font-size:.75em;line-height:1.7;">
-            Taux_h = Minima_8h / 8<br>
+            <b>Films pub.</b> : Taux_h = Min_8h / 8 ; Supp = max(H_eff&minus;8, 0) &times; Taux_h<br>
+            <b>Prod. cine.</b> : Taux_h = Min_7h / 7 ; Supp = max(H_eff&minus;7, 0) &times; Taux_h<br>
             Base = H_eff &times; Taux_h<br>
-            Supp = max(H_eff &minus; 8, 0) &times; Taux_h &nbsp;&nbsp;[+100%]<br>
             Majo_j = H_majo &times; Taux_h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[+100% conv. ou legal]<br>
             Majo_n = min(H_nuit,8)&times;Taux_h&times;0,5 + max(H_nuit-8,0)&times;Taux_h<br>
             Cap_conv = Base &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Art. 36]<br>
             Brut = Base + min(Supp+Majo_j+Majo_n, Cap_conv)<br>
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ H_antic&times;Taux_h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Art. 35, legal, hors cap]<br>
-            Cout = Brut &times; (1 + Taux_CS) + Indem_repas
+            Cout = Brut &times; (1 + Taux_CS) + Indem_repas<br>
+            Art. 37 hebdo : 36e-43e &times;+25%, 44e-48e &times;+50%, &gt;48e &times;+75%
           </p>
         </div>
       </div>
@@ -509,8 +529,8 @@
 
   <!-- FOOTER -->
   <div class="no-print" style="text-align:center;padding:18px 0 10px;font-size:.72em;color:#aaa;">
-    Simulateur Salaires CCNP (IDCC 3097) v3 — Soldats Films / 1618 Films — 2026<br>
-    Lot 2 : Art.35 H.anticipees, Art.39 6eme jour IDF, Art.46 indem. repas
+    Simulateur Salaires CCNP (IDCC 3097) v4 — Soldats Films / 1618 Films — 2026<br>
+    Films pub. (base 8h) + Production cinematographique (base 7h) / Art.35-36-37-39-40-41-42-43-46
   </div>
 </div>
 
@@ -656,6 +676,7 @@ const SECTIONS_ORDER = [
 ];
 
 let currentGrille = 'a';
+let currentProdType = 'pub'; // 'pub' | 'cine'
 let dayCount = 0;
 let fiches = [];
 let usdRate = null;
@@ -667,7 +688,39 @@ function fmtUSD(n){if(!usdRate)return '';return ' <small style="color:#888;font-
 function fmtUSDplain(n){if(!usdRate)return '';return '$'+(n*usdRate).toFixed(0);}
 function fmtH(h){const hh=Math.floor(h);const mm=Math.round((h-hh)*60);return hh+'h'+(mm>0?(mm<10?'0'+mm:mm):'');}
 function parseTime(s){const p=s.split(':');return parseInt(p[0])+parseInt(p[1])/60;}
-function grilleLabel(){return currentGrille==='b'?'Reevalue juil.2025/janv.2026 (+8,95%)':'Accord mars 2024';}
+function grilleLabel(){
+  const gl=currentGrille==='b'?'Reevalue juil.2025/janv.2026 (+8,95%)':'Accord mars 2024';
+  const art=currentProdType==='cine'?'Prod. cine. journee (base 7h)':'Films pub. (base 8h)';
+  return art+' — '+gl;
+}
+
+// Taux journalier selon type de production et grille
+// Films pub: pub_a ou pub_b (stored in METIERS)
+// Prod. cine. journee: pub_rate * 35/48 (meme base hebdo 39h, formule ÷40×1.25 × 7 vs ÷40×1.50 × 8)
+function getMetierRate(m){
+  const pubRate=currentGrille==='b'?m.b:m.a;
+  if(currentProdType==='pub') return pubRate;
+  return Math.round(pubRate*35/48*100)/100; // cine journee = pub × (7/8) × (1.25/1.50) = pub × 35/48
+}
+
+function getBaseH(){return currentProdType==='cine'?7:8;}
+
+function setType(t){
+  currentProdType=t;
+  document.getElementById('btn-type-pub').classList.toggle('active',t==='pub');
+  document.getElementById('btn-type-cine').classList.toggle('active',t==='cine');
+  // Mettre a jour les labels dynamiques
+  const bh=getBaseH();
+  const dlbl=document.getElementById('daily-min-label');
+  if(dlbl)dlbl.textContent='Minimum journalier '+bh+'h (brut EUR)';
+  const mlbl=document.getElementById('metier-label-txt');
+  if(mlbl)mlbl.textContent='Metier (postes SNTPCT Art. 34 '+(t==='cine'?'prod. cine.':'films pub.')+')';
+  const thSupp=document.getElementById('th-supp-label');
+  if(thSupp)thSupp.innerHTML='Supp +100%<br><small>au-dela '+bh+'h</small>';
+  const hlbl=document.getElementById('hourly-rate-label');
+  if(hlbl)hlbl.textContent='Taux horaire brut (auto = min/'+bh+'h)';
+  buildMetierSelect();
+}
 
 // ─── BUILD METIER SELECT ──────────────────────────────────────────────────────
 
@@ -680,9 +733,9 @@ function buildMetierSelect(){
     if(!items.length)continue;
     const og=document.createElement('optgroup');og.label=sec;
     for(const m of items){
-      const val=currentGrille==='b'?m.b:m.a;
+      const val=getMetierRate(m);
       const opt=document.createElement('option');
-      opt.value=JSON.stringify({f:m.f,a:m.a,b:m.b});
+      opt.value=JSON.stringify({f:m.f,a:m.a,b:m.b}); // toujours stocker les taux pub pour recomputer
       opt.textContent=m.f+' ('+fmt(val)+' EUR)';
       og.appendChild(opt);
     }
@@ -712,7 +765,7 @@ function onMetierChange(){
   } else {
     try{
       const m=JSON.parse(raw);
-      const val=currentGrille==='b'?m.b:m.a;
+      const val=getMetierRate(m);
       document.getElementById('daily-min').value=val;
       document.getElementById('rate-source').value='sntpct';
     }catch(e){}
@@ -728,7 +781,8 @@ function getMetierLabel(){
 
 function updateBadge(){
   const v=parseFloat(document.getElementById('daily-min').value)||0;
-  document.getElementById('rate-badge').textContent=fmt(v)+' EUR/8h';
+  const bh=getBaseH();
+  document.getElementById('rate-badge').textContent=fmt(v)+' EUR/'+bh+'h';
 }
 
 // ─── JOURS FERIES (France metropolitaine) ────────────────────────────────────
@@ -1004,7 +1058,8 @@ function getDaysData(){
 
 // ─── CALC ─────────────────────────────────────────────────────────────────────
 
-function calcDay(d, tauxH){
+function calcDay(d, tauxH, baseH){
+  baseH=baseH||8; // 8h pour films pub, 7h pour prod. cine. journee
   const s=parseTime(d.start), eRaw=parseTime(d.end);
   const e=(eRaw<=s)?eRaw+24:eRaw;
   const durationH=e-s; // duree brute (avant deduction pause)
@@ -1015,8 +1070,8 @@ function calcDay(d, tauxH){
   const hEff=Math.max(durationH-pause,0);
   const base=hEff*tauxH;
 
-  // Heures supplementaires au-dela de 8h : +100% (Art. 34 films pub.)
-  const s100h=Math.max(hEff-8,0);
+  // Heures supplementaires au-dela de la base (8h films pub / 7h prod. cine.) : +100%
+  const s100h=Math.max(hEff-baseH,0);
   const s100=s100h*tauxH;
 
   // Majoration dim./ferie : +100% sur les heures saisies (Arts 41-42)
@@ -1052,8 +1107,14 @@ function calcDay(d, tauxH){
 
 function recalc(){
   const dm=parseFloat(document.getElementById('daily-min').value)||0;
-  const tauxH=dm/8;
+  const baseH=getBaseH();
+  const tauxH=dm/baseH;
   document.getElementById('hourly-rate').value=fmt(tauxH)+' EUR/h';
+  // Mettre a jour les labels
+  const dlbl=document.getElementById('daily-min-label');
+  if(dlbl)dlbl.textContent='Minimum journalier '+baseH+'h (brut EUR)';
+  const thSupp=document.getElementById('th-supp-label');
+  if(thSupp)thSupp.innerHTML='Supp +100%<br><small>au-dela '+baseH+'h</small>';
   updateBadge();
   const csRate=parseFloat(document.getElementById('cs-rate').value)||0;
   const tbody=document.getElementById('result-body');
@@ -1065,7 +1126,7 @@ function recalc(){
 
   for(let di=0;di<daysData.length;di++){
     const d=daysData[di];
-    const r=calcDay(d,tauxH);nbJ++;
+    const r=calcDay(d,tauxH,baseH);nbJ++;
     const haH=haByDay[di]; // heures anticipees (legal, hors plafond)
     const haMnt=haH*tauxH; // montant +100% legal
     const totalJour=r.total+haMnt;
@@ -1104,7 +1165,7 @@ function recalc(){
       <td>${d.start}–${d.end} (${d.pause}')${r.isJC?' <small style="color:#856404">J.cont.</small>':''}</td>
       <td>${fmtH(r.hEff)}</td>
       <td>${fmt(r.base)}</td>
-      <td>${r.s100h>0?fmt(r.s100)+' <small>('+fmtH(r.s100h)+')</small>':'-'}</td>
+      <td>${r.s100h>0?fmt(r.s100)+' <small>('+fmtH(r.s100h)+' >'+baseH+'h)</small>':'-'}</td>
       <td>${mjDetail}</td>
       <td>${mnDetail}</td>
       <td>${haDetail}</td>
@@ -1144,6 +1205,31 @@ function recalc(){
   document.getElementById('r-cs').textContent=fmtE(cs)+' (×'+fmt(csRate)+')';
   document.getElementById('r-cout').textContent=fmtE(cout);
   document.getElementById('r-jours').textContent=nbJ;
+  // Heures effectives et indicateur Art. 37
+  const rHeuresEl=document.getElementById('r-heures');
+  if(rHeuresEl)rHeuresEl.textContent=fmtH(T.hEff);
+  const rHeuresLblEl=document.getElementById('r-heures-lbl');
+  if(rHeuresLblEl)rHeuresLblEl.textContent=T.hEff>39?'H. eff. ⚠️ >39h':'H. effectives';
+  if(rHeuresEl)rHeuresEl.style.color=T.hEff>39?'#c0392b':'#0f3460';
+  // Art. 37 : avertissement si > 39h (seuil semaine de reference)
+  const art37El=document.getElementById('art37-warn');
+  if(art37El){
+    if(T.hEff>39&&nbJ>0){
+      const ot25h=Math.max(Math.min(T.hEff,43)-35,0);
+      const ot50h=Math.max(Math.min(T.hEff,48)-43,0);
+      const ot75h=Math.max(T.hEff-48,0);
+      const otEst=(ot25h*0.25+ot50h*0.5+ot75h*0.75)*tauxH;
+      let art37Txt=`&#9888;&nbsp;<b>Art. 37 — ${fmtH(T.hEff)} effectives sur la periode :</b> seuil hebdo 39h depasse.`;
+      if(ot25h>0)art37Txt+=` ${fmtH(ot25h)}h &times;+25%`;
+      if(ot50h>0)art37Txt+=`, ${fmtH(ot50h)}h &times;+50%`;
+      if(ot75h>0)art37Txt+=`, ${fmtH(ot75h)}h &times;+75%`;
+      art37Txt+=` &asymp; <b>+${fmt(otEst)} EUR</b> supp. hebdo (si une seule semaine — a regulariser si reparti sur plusieurs semaines).`;
+      art37El.innerHTML=art37Txt;
+      art37El.style.display='block';
+    } else {
+      art37El.style.display='none';
+    }
+  }
   // Conversion USD
   const usdRecap=document.getElementById('usd-recap');
   if(usdRate&&usdRecap){
@@ -1152,7 +1238,8 @@ function recalc(){
     document.getElementById('r-cout-usd').textContent=fmtUSDplain(cout);
   }
 
-  let fHtml='';
+  const typeLbl=currentProdType==='cine'?'Prod. cine. journee (base 7h, taux=hebdo÷40×1,25)':'Films pub. (base 8h, taux=hebdo÷40×1,50)';
+  let fHtml=`<span style="font-size:.75em;color:#555;font-style:italic">${typeLbl} — Grille ${grilleLabel()}</span><br>`;
   if(T.nbJC>0)fHtml+=`<span style="background:#fff3cd;color:#856404;font-size:.82em;padding:2px 7px;border-radius:4px;font-weight:600;display:inline-block;margin-bottom:6px;">&#128992; ${T.nbJC} journee${T.nbJC>1?'s':''} continue${T.nbJC>1?'s':''} — pause comptee comme temps travaille</span><br>`;
   fHtml+=`${fmt(T.base)} (base) + ${fmt(T.s100)} (supp +100%) + ${fmt(T.mj)} (majo dim./ferie +100%) + ${fmt(T.mn)} (majo nuit)`;
   if(T.ha>0)fHtml+=` + <span class="ha-warn">${fmt(T.ha)} (Art.35 H.anticipees +100%)</span>`;
@@ -1175,6 +1262,7 @@ function saveFiche(){
     id:Date.now(),name,metier:getMetierLabel(),
     metierIndex:document.getElementById('metier-select').selectedIndex,
     grille:currentGrille,
+    prodType:currentProdType,
     dailyMin:parseFloat(document.getElementById('daily-min').value)||0,
     csRate:document.getElementById('cs-rate').value,
     rateSource:document.getElementById('rate-source').value,
@@ -1194,6 +1282,7 @@ function saveFiche(){
 
 function loadFiche(id){
   const f=fiches.find(x=>x.id===id);if(!f)return;
+  if(f.prodType&&f.prodType!==currentProdType)setType(f.prodType);
   if(f.grille&&f.grille!==currentGrille)setGrille(f.grille);
   document.getElementById('tech-name').value=f.name;
   document.getElementById('daily-min').value=f.dailyMin;
@@ -1219,8 +1308,9 @@ function renderFiches(){
   let h='';
   for(const f of fiches){
     const gl=f.grille==='b'?'07/2025':'03/2024';
+    const pt=f.prodType==='cine'?'Cine.7h':'Pub.8h';
     h+=`<div class="fiche-item">
-      <div><span class="fname">${f.name}</span><br><span class="fdetail">${f.metier} [${gl}]</span></div>
+      <div><span class="fname">${f.name}</span><br><span class="fdetail">${f.metier} [${pt} / ${gl}]</span></div>
       <div class="fdetail">${fmt(f.dailyMin||0)} EUR/8h</div>
       <div class="fdetail">${f.days?f.days.length:0} jour(s)</div>
       <div class="ftotal">${f.totalBrut||'-'}</div>
@@ -1316,6 +1406,7 @@ function getAccordData(){
     techName:document.getElementById('tech-name').value||'',
     metierIndex:document.getElementById('metier-select').selectedIndex,
     grille:currentGrille,
+    prodType:currentProdType,
     dailyMin:parseFloat(document.getElementById('daily-min').value)||0,
     csRate:document.getElementById('cs-rate').value,
     rateSource:document.getElementById('rate-source').value,
@@ -1375,6 +1466,7 @@ function loadFromHash(){
   try{
     const encoded=hash.slice(7);
     const data=JSON.parse(decodeURIComponent(escape(atob(encoded))));
+    if(data.prodType&&data.prodType!==currentProdType)setType(data.prodType);
     if(data.grille&&data.grille!==currentGrille)setGrille(data.grille);
     if(data.techName)document.getElementById('tech-name').value=data.techName;
     if(data.dailyMin)document.getElementById('daily-min').value=data.dailyMin;
