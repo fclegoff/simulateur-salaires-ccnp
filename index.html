@@ -119,6 +119,9 @@
   /* ─── Indemnités card ───────────────────────────────────────────── */
   .indem-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
   @media(max-width:700px){.rules-grid{grid-template-columns:1fr}.indem-grid{grid-template-columns:1fr}}
+  /* ─── Mode semaine ───────────────────────────────────────────────── */
+  .week-row{display:grid;grid-template-columns:180px 110px 40px;gap:7px;align-items:center;margin-bottom:7px;padding:6px 8px;background:#fafbfc;border-radius:6px}
+  .week-ot-badge{display:inline-block;font-size:.7em;font-weight:700;border-radius:4px;padding:1px 6px;background:#fff0d8;color:#c07000;border:1px solid #f5c685;margin-top:2px}
 </style>
 </head>
 <body>
@@ -148,7 +151,13 @@
   <div class="card">
     <h2>Grille tarifaire et metier <span class="rate-badge" id="rate-badge">396,12 EUR/8h</span></h2>
 
-    <p class="grille-label no-print">Type de production :</p>
+    <p class="grille-label no-print">Mode de contrat :</p>
+    <div class="grille-toggle no-print" id="contrat-toggle" style="margin-bottom:10px;">
+      <button id="btn-contrat-journee" class="active" onclick="setContrat('journee')">&#128197; Journee (contrat a la journee)</button>
+      <button id="btn-contrat-semaine" onclick="setContrat('semaine')">&#128198; Semaine (contrat hebdomadaire)</button>
+    </div>
+
+    <p class="grille-label no-print" id="type-toggle-label">Type de production :</p>
     <div class="grille-toggle no-print" id="type-toggle" style="margin-bottom:8px;">
       <button id="btn-type-pub" class="active" onclick="setType('pub')">&#127916; Films publicitaires — Art. 34 (base 8h)</button>
       <button id="btn-type-cine" onclick="setType('cine')">&#127916; Production cinematographique — Art. 34 (base 7h)</button>
@@ -209,7 +218,7 @@
   </div>
 
   <!-- JOURNEES -->
-  <div class="card">
+  <div class="card" id="journees-card">
     <h2>Journees de travail</h2>
     <p class="info no-print">
       Calcul auto : base, supp +100% (au-dela 8h / Art. 34), majo dim./ferie +100% (Arts 41-42) auto-detecte sur la date.
@@ -238,11 +247,28 @@
     </table>
   </div>
 
+  <!-- SEMAINES (mode hebdomadaire) -->
+  <div class="card" id="semaines-card" style="display:none;">
+    <h2>Semaines de travail</h2>
+    <p class="info no-print">
+      Minimum hebdomadaire SNTPCT garanti pour 39h travaillees. Art. 37 — heures supplementaires :
+      40e&ndash;43e heure <b>+25 %</b> &middot; 44e&ndash;48e <b>+50 %</b> &middot; au-dela 48h <b>+75 %</b>.
+      Taux horaire = minimum hebdo &divide; 40.
+    </p>
+    <div class="no-print" style="display:grid;grid-template-columns:180px 110px 40px;gap:7px;padding:0 8px;margin-bottom:4px;">
+      <span style="font-size:.7em;color:#999;font-weight:600;">Semaine (date debut)</span>
+      <span style="font-size:.7em;color:#999;font-weight:600;">Heures travaillees</span>
+      <span></span>
+    </div>
+    <div id="weeks-container" class="no-print"></div>
+    <button class="btn btn-add no-print" onclick="addWeek()" style="margin-top:6px;">+ Ajouter une semaine</button>
+  </div>
+
   <!-- RESULTAT -->
   <div class="card">
     <h2>Resultat detaille</h2>
     <table>
-      <thead>
+      <thead id="result-thead-journee">
         <tr>
           <th>Jour</th><th>Horaires</th><th>H. eff.</th>
           <th>Base EUR<br><small>h x taux</small></th>
@@ -251,6 +277,16 @@
           <th>Majo nuit<br><small>+50%/+100%</small></th>
           <th>H. antic.<br><small>Art.35 +100%</small></th>
           <th>Total EUR<br><small id="th-usd-rate"></small></th>
+        </tr>
+      </thead>
+      <thead id="result-thead-semaine" style="display:none;">
+        <tr>
+          <th>Semaine</th><th>H. travaillees</th>
+          <th>Minimum garanti<br><small>39h SNTPCT</small></th>
+          <th>Art.37 +25%<br><small>h40-43</small></th>
+          <th>Art.37 +50%<br><small>h44-48</small></th>
+          <th>Art.37 +75%<br><small>&gt;48h</small></th>
+          <th>Total EUR<br><small id="th-usd-rate-sem"></small></th>
         </tr>
       </thead>
       <tbody id="result-body"></tbody>
@@ -675,6 +711,8 @@ const SECTIONS_ORDER = [
 
 let currentGrille = 'a';
 let currentProdType = 'pub'; // 'pub' | 'cine'
+let currentContrat = 'journee'; // 'journee' | 'semaine'
+let weekCount = 0;
 let dayCount = 0;
 let fiches = [];
 let usdRate = null;
@@ -695,7 +733,9 @@ function grilleLabel(){
 // Taux journalier selon type de production et grille
 // Films pub: pub_a ou pub_b (stored in METIERS)
 // Prod. cine. journee: pub_rate * 35/48 (meme base hebdo 39h, formule ÷40×1.25 × 7 vs ÷40×1.50 × 8)
+// Mode semaine: taux hebdomadaire SNTPCT = pub_daily / 0.3
 function getMetierRate(m){
+  if(currentContrat==='semaine') return getHebdoRate(m);
   const pubRate=currentGrille==='b'?m.b:m.a;
   if(currentProdType==='pub') return pubRate;
   return Math.round(pubRate*35/48*100)/100; // cine journee = pub × (7/8) × (1.25/1.50) = pub × 35/48
@@ -718,6 +758,188 @@ function setType(t){
   const hlbl=document.getElementById('hourly-rate-label');
   if(hlbl)hlbl.textContent='Taux horaire brut (auto = min/'+bh+'h)';
   buildMetierSelect();
+}
+
+// Taux hebdomadaire SNTPCT Annexe I = taux pub journalier / 0.3
+// (pub_daily = hebdo × 1.50/40 × 8 = hebdo × 0.3)
+function getHebdoRate(m){
+  const pubRate=currentGrille==='b'?m.b:m.a;
+  return Math.round(pubRate/0.3*100)/100;
+}
+
+function setContrat(c){
+  currentContrat=c;
+  document.getElementById('btn-contrat-journee').classList.toggle('active',c==='journee');
+  document.getElementById('btn-contrat-semaine').classList.toggle('active',c==='semaine');
+  const journeesCard=document.getElementById('journees-card');
+  const semainesCard=document.getElementById('semaines-card');
+  const typeToggle=document.getElementById('type-toggle');
+  const typeToggleLbl=document.getElementById('type-toggle-label');
+  const subEl=document.getElementById('app-sub');
+  if(c==='semaine'){
+    if(journeesCard)journeesCard.style.display='none';
+    if(semainesCard)semainesCard.style.display='block';
+    if(typeToggle)typeToggle.style.display='none';
+    if(typeToggleLbl)typeToggleLbl.style.display='none';
+    const dlbl=document.getElementById('daily-min-label');
+    if(dlbl)dlbl.textContent='Minimum hebdomadaire 39h (brut EUR)';
+    const hlbl=document.getElementById('hourly-rate-label');
+    if(hlbl)hlbl.textContent='Taux horaire brut (auto = min/40)';
+    if(subEl)subEl.textContent='Convention CCNP Cinema-Publicite (IDCC 3097) / Art. 34 + Art. 37 / Contrat hebdomadaire';
+    // Thead : afficher hebdo, masquer journee
+    const thJ=document.getElementById('result-thead-journee');
+    const thS=document.getElementById('result-thead-semaine');
+    if(thJ)thJ.style.display='none';
+    if(thS)thS.style.display='';
+    // Ajouter une semaine par defaut si vide
+    if(!document.getElementById('weeks-container').children.length) addWeek();
+  } else {
+    if(journeesCard)journeesCard.style.display='block';
+    if(semainesCard)semainesCard.style.display='none';
+    if(typeToggle)typeToggle.style.display='flex';
+    if(typeToggleLbl)typeToggleLbl.style.display='block';
+    if(subEl)subEl.textContent='Convention CCNP Cinema-Publicite (IDCC 3097) / Art. 34 / Contrat a la journee';
+    const thJ=document.getElementById('result-thead-journee');
+    const thS=document.getElementById('result-thead-semaine');
+    if(thJ)thJ.style.display='';
+    if(thS)thS.style.display='none';
+    setType(currentProdType); // restaure labels journee
+  }
+  buildMetierSelect();
+}
+
+// ─── SEMAINES ─────────────────────────────────────────────────────────────────
+
+function addWeek(heures, dateVal){
+  weekCount++;const id=weekCount;
+  const n=document.getElementById('weeks-container').children.length+1;
+  const div=document.createElement('div');
+  div.className='week-row';div.id='week-'+id;
+  div.innerHTML=`
+    <div>
+      <input type="date" id="wdate-${id}" value="${dateVal||''}" style="width:100%"/>
+      <span style="font-size:.7em;color:#888">Semaine ${n}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;">
+      <input type="number" id="wheures-${id}" value="${heures||39}" min="1" max="80" step="0.5" style="width:72px" onchange="recalc()"/>
+      <span style="font-size:.78em;color:#555">h</span>
+    </div>
+    <div><button class="btn-del" onclick="removeWeek(${id})">X</button></div>`;
+  document.getElementById('weeks-container').appendChild(div);
+  recalc();
+}
+
+function removeWeek(id){const el=document.getElementById('week-'+id);if(el)el.remove();recalc();}
+
+function getWeeksData(){
+  const r=[];
+  const rows=document.getElementById('weeks-container').children;
+  for(let i=0;i<rows.length;i++){
+    const id=rows[i].id.replace('week-','');
+    const hEl=document.getElementById('wheures-'+id);
+    const dEl=document.getElementById('wdate-'+id);
+    if(!hEl)continue;
+    r.push({heures:parseFloat(hEl.value)||39,date:dEl?dEl.value:''});
+  }
+  return r;
+}
+
+function calcWeek(w, minHebdo, tauxH){
+  const h=w.heures||39;
+  // Minimum garanti pour h >= 39 (contrat hebdo = 39h minimum)
+  const base=h>=39?minHebdo:Math.round(h*tauxH*100)/100;
+  // Art. 37 heures sup au-dela de 39h
+  const ot25h=Math.max(Math.min(h,43)-39,0); // h40-43
+  const ot50h=Math.max(Math.min(h,48)-43,0); // h44-48
+  const ot75h=Math.max(h-48,0);              // h>48
+  const ot25=Math.round(ot25h*tauxH*0.25*100)/100;
+  const ot50=Math.round(ot50h*tauxH*0.50*100)/100;
+  const ot75=Math.round(ot75h*tauxH*0.75*100)/100;
+  const otTotal=ot25+ot50+ot75;
+  return{h,base,ot25h,ot25,ot50h,ot50,ot75h,ot75,otTotal,total:base+otTotal};
+}
+
+function recalcSemaine(){
+  const minHebdo=parseFloat(document.getElementById('daily-min').value)||0;
+  const tauxH=minHebdo/40;
+  document.getElementById('hourly-rate').value=fmt(tauxH)+' EUR/h';
+  updateBadge();
+  const csRate=parseFloat(document.getElementById('cs-rate').value)||0;
+  const tbody=document.getElementById('result-body');
+  tbody.innerHTML='';
+  let TT={base:0,ot25:0,ot50:0,ot75:0,total:0},nbS=0;
+
+  const weeksData=getWeeksData();
+  for(let wi=0;wi<weeksData.length;wi++){
+    const w=weeksData[wi];
+    const r=calcWeek(w,minHebdo,tauxH);nbS++;
+    const dl=w.date
+      ?new Date(w.date+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit'})
+      :'Semaine '+nbS;
+    const otBadge=r.otTotal>0?`<span class="week-ot-badge">+${fmt(r.otTotal)} supp.</span>`:'';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${dl}${otBadge}</td>
+      <td style="font-weight:700;color:${r.h>39?'#c0392b':'inherit'}">${fmtH(r.h)}</td>
+      <td>${fmt(r.base)}</td>
+      <td>${r.ot25h>0?fmt(r.ot25)+' <small>('+fmtH(r.ot25h)+'h)</small>':'-'}</td>
+      <td>${r.ot50h>0?fmt(r.ot50)+' <small>('+fmtH(r.ot50h)+'h)</small>':'-'}</td>
+      <td>${r.ot75h>0?fmt(r.ot75)+' <small>('+fmtH(r.ot75h)+'h)</small>':'-'}</td>
+      <td style="font-weight:700">${fmt(r.total)}${fmtUSD(r.total)}</td>`;
+    tbody.appendChild(tr);
+    TT.base+=r.base;TT.ot25+=r.ot25;TT.ot50+=r.ot50;TT.ot75+=r.ot75;TT.total+=r.total;
+  }
+  if(nbS>0){
+    const tr=document.createElement('tr');tr.className='total-row';
+    tr.innerHTML=`<td>TOTAL</td><td>${nbS} sem.</td>
+      <td>${fmt(TT.base)}</td>
+      <td>${TT.ot25>0?fmt(TT.ot25):'-'}</td>
+      <td>${TT.ot50>0?fmt(TT.ot50):'-'}</td>
+      <td>${TT.ot75>0?fmt(TT.ot75):'-'}</td>
+      <td>${fmt(TT.total)}${fmtUSD(TT.total)}</td>`;
+    tbody.appendChild(tr);
+  }
+  // Indemnites
+  const nbRepas=parseInt(document.getElementById('nb-repas')?.value)||0;
+  const nbCC=parseInt(document.getElementById('nb-cc')?.value)||0;
+  const totalIndem=nbRepas*20.07+nbCC*8.95;
+  const tiEl=document.getElementById('total-indem');
+  if(tiEl)tiEl.value=fmtE(totalIndem);
+  // Recap
+  const cs=TT.total*csRate,cout=TT.total+cs;
+  document.getElementById('r-brut').textContent=fmtE(TT.total);
+  document.getElementById('r-cs').textContent=fmtE(cs)+' (×'+fmt(csRate)+')';
+  document.getElementById('r-cout').textContent=fmtE(cout);
+  document.getElementById('r-jours').textContent=nbS+' sem.';
+  const rHeuresEl=document.getElementById('r-heures');
+  const totalH=weeksData.reduce((s,w)=>s+(parseFloat(w.heures)||39),0);
+  if(rHeuresEl){rHeuresEl.textContent=fmtH(totalH);rHeuresEl.style.color='#0f3460';}
+  const rHLbl=document.getElementById('r-heures-lbl');
+  if(rHLbl)rHLbl.textContent='H. totales';
+  // Art. 37 recap dans formula-text
+  const otTotal=TT.ot25+TT.ot50+TT.ot75;
+  const totalGeneral=cout+totalIndem;
+  let fHtml=`<span style="font-size:.75em;color:#555;font-style:italic">Contrat hebdomadaire — Grille ${grilleLabel().replace(/^.*— /,'')}</span><br>`;
+  fHtml+=`${fmt(TT.base)} (minimum hebdo garanti)`;
+  if(otTotal>0)fHtml+=` + <span style="color:#c07000;font-weight:700">${fmt(otTotal)} (Art.37 heures sup.)</span>`;
+  fHtml+=` = <b>${fmtE(TT.total)}</b>`;
+  fHtml+=`<br>Cout employeur = ${fmt(TT.total)} × (1 + ${fmt(csRate)}) = <b>${fmtE(cout)}</b>`;
+  if(totalIndem>0){
+    fHtml+=`<br>Indemnites repas = <b>${fmtE(totalIndem)}</b>`;
+    fHtml+=`<br><b style="color:#0f3460">Total general = ${fmtE(totalGeneral)}</b>`;
+  }
+  document.getElementById('formula-text').innerHTML=fHtml;
+  // USD recap
+  const usdRecap=document.getElementById('usd-recap');
+  if(usdRate&&usdRecap){
+    usdRecap.style.display='block';
+    document.getElementById('r-brut-usd').textContent=fmtUSDplain(TT.total);
+    document.getElementById('r-cout-usd').textContent=fmtUSDplain(cout);
+  }
+  // Masquer indicateur Art.37 journee (pas pertinent en mode semaine)
+  const art37El=document.getElementById('art37-warn');
+  if(art37El)art37El.style.display='none';
+  const jcWarnEl=document.getElementById('jc-warn');
+  if(jcWarnEl)jcWarnEl.style.display='none';
 }
 
 // ─── BUILD METIER SELECT ──────────────────────────────────────────────────────
@@ -779,6 +1001,10 @@ function getMetierLabel(){
 
 function updateBadge(){
   const v=parseFloat(document.getElementById('daily-min').value)||0;
+  if(currentContrat==='semaine'){
+    document.getElementById('rate-badge').textContent=fmt(v)+' EUR/sem.';
+    return;
+  }
   const bh=getBaseH();
   document.getElementById('rate-badge').textContent=fmt(v)+' EUR/'+bh+'h';
 }
@@ -1104,6 +1330,7 @@ function calcDay(d, tauxH, baseH){
 }
 
 function recalc(){
+  if(currentContrat==='semaine'){recalcSemaine();return;}
   const dm=parseFloat(document.getElementById('daily-min').value)||0;
   const baseH=getBaseH();
   const tauxH=dm/baseH;
@@ -1261,10 +1488,12 @@ function saveFiche(){
     metierIndex:document.getElementById('metier-select').selectedIndex,
     grille:currentGrille,
     prodType:currentProdType,
+    contrat:currentContrat,
     dailyMin:parseFloat(document.getElementById('daily-min').value)||0,
     csRate:document.getElementById('cs-rate').value,
     rateSource:document.getElementById('rate-source').value,
     days:getDaysData(),
+    weeks:getWeeksData(),
     nbRepas:parseInt(document.getElementById('nb-repas')?.value)||0,
     nbCC:parseInt(document.getElementById('nb-cc')?.value)||0,
     totalBrut:document.getElementById('r-brut').textContent,
@@ -1280,6 +1509,7 @@ function saveFiche(){
 
 function loadFiche(id){
   const f=fiches.find(x=>x.id===id);if(!f)return;
+  if(f.contrat&&f.contrat!==currentContrat)setContrat(f.contrat);
   if(f.prodType&&f.prodType!==currentProdType)setType(f.prodType);
   if(f.grille&&f.grille!==currentGrille)setGrille(f.grille);
   document.getElementById('tech-name').value=f.name;
@@ -1288,8 +1518,12 @@ function loadFiche(id){
   document.getElementById('rate-source').value=f.rateSource||'sntpct';
   if(f.metierIndex!==undefined)document.getElementById('metier-select').selectedIndex=f.metierIndex;
   document.getElementById('days-container').innerHTML='';dayCount=0;
-  for(const d of f.days){
+  for(const d of(f.days||[])){
     addDay(d.start,d.end,d.pause,d.majoJ,d.majoN,d.date||'',d.sixiemeJour||false);
+  }
+  document.getElementById('weeks-container').innerHTML='';weekCount=0;
+  for(const w of(f.weeks||[])){
+    addWeek(w.heures,w.date||'');
   }
   const nrEl=document.getElementById('nb-repas');
   const ncEl=document.getElementById('nb-cc');
@@ -1306,7 +1540,7 @@ function renderFiches(){
   let h='';
   for(const f of fiches){
     const gl=f.grille==='b'?'07/2025':'03/2024';
-    const pt=f.prodType==='cine'?'Cine.7h':'Pub.8h';
+    const pt=f.contrat==='semaine'?'Hebdo':f.prodType==='cine'?'Cine.7h':'Pub.8h';
     h+=`<div class="fiche-item">
       <div><span class="fname">${f.name}</span><br><span class="fdetail">${f.metier} [${pt} / ${gl}]</span></div>
       <div class="fdetail">${fmt(f.dailyMin||0)} EUR/8h</div>
@@ -1405,6 +1639,8 @@ function getAccordData(){
     metierIndex:document.getElementById('metier-select').selectedIndex,
     grille:currentGrille,
     prodType:currentProdType,
+    contrat:currentContrat,
+    weeks:getWeeksData(),
     dailyMin:parseFloat(document.getElementById('daily-min').value)||0,
     csRate:document.getElementById('cs-rate').value,
     rateSource:document.getElementById('rate-source').value,
@@ -1464,6 +1700,7 @@ function loadFromHash(){
   try{
     const encoded=hash.slice(7);
     const data=JSON.parse(decodeURIComponent(escape(atob(encoded))));
+    if(data.contrat&&data.contrat!==currentContrat)setContrat(data.contrat);
     if(data.prodType&&data.prodType!==currentProdType)setType(data.prodType);
     if(data.grille&&data.grille!==currentGrille)setGrille(data.grille);
     if(data.techName)document.getElementById('tech-name').value=data.techName;
@@ -1474,6 +1711,10 @@ function loadFromHash(){
     document.getElementById('days-container').innerHTML='';dayCount=0;
     for(const d of(data.days||[])){
       addDay(d.start,d.end,d.pause,d.majoJ,d.majoN,d.date||'',d.sixiemeJour||false);
+    }
+    document.getElementById('weeks-container').innerHTML='';weekCount=0;
+    for(const w of(data.weeks||[])){
+      addWeek(w.heures,w.date||'');
     }
     const nrEl=document.getElementById('nb-repas'),ncEl=document.getElementById('nb-cc');
     if(nrEl)nrEl.value=data.nbRepas||0;
